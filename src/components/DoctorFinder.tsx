@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, MapPin, Phone, Building2, Loader2, User, Star } from "lucide-react";
+import { Search, MapPin, Phone, Building2, Loader2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Doctor {
   name: string;
@@ -38,57 +39,20 @@ const DoctorFinder = () => {
     setHasSearched(true);
 
     try {
-      // Using the free NPI (National Provider Identifier) Registry API
-      // This is a free, official US government API - no API key required
-      const params = new URLSearchParams({
-        version: "2.1",
-        enumeration_type: "NPI-1", // Individual providers
-        taxonomy_description: "Dermatology",
-        limit: "10",
+      // Call our edge function to avoid CORS issues
+      const { data, error } = await supabase.functions.invoke('find-doctors', {
+        body: { zipCode, city }
       });
 
-      if (zipCode) {
-        params.append("postal_code", zipCode.substring(0, 5));
-      }
-      if (city) {
-        params.append("city", city);
+      if (error) {
+        throw new Error(error.message || "Failed to search for doctors");
       }
 
-      const response = await fetch(
-        `https://npiregistry.cms.hhs.gov/api/?${params.toString()}`
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to search for doctors");
-      }
-
-      const data = await response.json();
-      
-      if (data.results && data.results.length > 0) {
-        const formattedDoctors: Doctor[] = data.results.map((result: any) => {
-          const basic = result.basic || {};
-          const address = result.addresses?.find((a: any) => a.address_purpose === "LOCATION") || 
-                         result.addresses?.[0] || {};
-          
-          const firstName = basic.first_name || "";
-          const lastName = basic.last_name || "";
-          const credential = basic.credential || "";
-          
-          return {
-            name: `Dr. ${firstName} ${lastName}${credential ? `, ${credential}` : ""}`,
-            specialty: result.taxonomies?.[0]?.desc || "Dermatology",
-            address: address.address_1 || "Address not available",
-            city: address.city || "",
-            state: address.state || "",
-            zip: address.postal_code?.substring(0, 5) || "",
-            phone: address.telephone_number || "Not available",
-          };
-        });
-
-        setDoctors(formattedDoctors);
+      if (data.doctors && data.doctors.length > 0) {
+        setDoctors(data.doctors);
         toast({
           title: "Doctors Found",
-          description: `Found ${formattedDoctors.length} dermatologists in your area.`,
+          description: `Found ${data.doctors.length} dermatologists in your area.`,
         });
       } else {
         setDoctors([]);
@@ -133,7 +97,7 @@ const DoctorFinder = () => {
             Find a <span className="text-primary">Dermatologist</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Search for board-certified dermatologists near you using the official NPI Registry
+            Search for board-certified dermatologists near you using the official NPI Registry (US only)
           </p>
         </motion.div>
 
@@ -148,18 +112,19 @@ const DoctorFinder = () => {
             <CardContent className="p-6">
               <div className="grid sm:grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Zip Code</label>
+                  <label className="block text-sm font-medium mb-2">Zip/Pin Code</label>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       type="text"
                       value={zipCode}
-                      onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                      placeholder="Enter zip code"
+                      onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="Enter zip/pin code"
                       className="pl-10 bg-secondary/50 border-border/50"
-                      maxLength={5}
+                      maxLength={6}
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1">5-6 digits supported</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-2">City Name</label>
@@ -261,7 +226,7 @@ const DoctorFinder = () => {
               </div>
               <h3 className="text-lg font-medium mb-2">No Doctors Found</h3>
               <p className="text-muted-foreground text-sm">
-                Try searching with a different zip code or city name
+                Try searching with a different zip code or city name (US locations only)
               </p>
             </motion.div>
           ) : null}
