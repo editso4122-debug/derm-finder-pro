@@ -17,12 +17,58 @@ interface AnalysisResult {
   predictions: Array<{ disease: string; confidence: number }>;
 }
 
+// Demo analysis function when backend is not available
+const getDemoAnalysis = (symptoms: string): AnalysisResult => {
+  const lowerSymptoms = symptoms.toLowerCase();
+  
+  // Simple symptom-based matching for demo
+  let condition = "Contact Dermatitis";
+  let confidence = 68.5;
+  let severity = "Low";
+  
+  if (lowerSymptoms.includes("itch") || lowerSymptoms.includes("red")) {
+    condition = "Atopic Dermatitis";
+    confidence = 72.3;
+  } else if (lowerSymptoms.includes("white") || lowerSymptoms.includes("patch")) {
+    condition = "Vitiligo";
+    confidence = 65.8;
+  } else if (lowerSymptoms.includes("acne") || lowerSymptoms.includes("pimple")) {
+    condition = "Acne Vulgaris";
+    confidence = 78.2;
+  } else if (lowerSymptoms.includes("scale") || lowerSymptoms.includes("flaky")) {
+    condition = "Psoriasis Vulgaris";
+    confidence = 70.1;
+  }
+
+  return {
+    condition,
+    confidence,
+    description: `Possible condition: ${condition}. This is not a diagnosis.`,
+    severity,
+    suggestedDoctor: "Dermatologist",
+    symptomAnalysis: `Based on your description of "${symptoms}", the AI model suggests this could be ${condition}. The visual features and symptoms you described are commonly associated with this condition. However, only a qualified dermatologist can provide an accurate diagnosis.`,
+    recommendations: [
+      "This is a DEMO analysis - connect your Flask backend for real AI analysis.",
+      "This is not a medical diagnosis.",
+      "Consult a dermatologist for confirmation.",
+      "Avoid self-medicating.",
+      "Monitor the area for changes."
+    ],
+    predictions: [
+      { disease: condition, confidence: confidence / 100 },
+      { disease: "Contact Dermatitis", confidence: 0.15 },
+      { disease: "Eczema", confidence: 0.08 },
+    ]
+  };
+};
+
 const SkinAnalyzer = () => {
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [symptoms, setSymptoms] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [useDemoMode, setUseDemoMode] = useState(false);
   const { toast } = useToast();
 
   const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,7 +124,7 @@ const SkinAnalyzer = () => {
       formData.append("file", image);
       formData.append("symptoms", symptoms);
 
-      // Replace with your actual backend URL
+      // Try backend first, fallback to demo
       const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
       
       const response = await fetch(`${API_URL}/analyze`, {
@@ -93,6 +139,7 @@ const SkinAnalyzer = () => {
 
       const data = await response.json();
       setResult(data);
+      setUseDemoMode(false);
       
       toast({
         title: "Analysis Complete",
@@ -100,10 +147,16 @@ const SkinAnalyzer = () => {
       });
     } catch (error) {
       console.error("Analysis error:", error);
+      
+      // Use demo mode as fallback
+      const demoResult = getDemoAnalysis(symptoms);
+      setResult(demoResult);
+      setUseDemoMode(true);
+      
       toast({
-        title: "Analysis Failed",
-        description: error instanceof Error ? error.message : "Could not connect to analysis server. Make sure the backend is running.",
-        variant: "destructive",
+        title: "Demo Mode Active",
+        description: "Backend not available. Showing demo analysis.",
+        variant: "default",
       });
     } finally {
       setIsAnalyzing(false);
@@ -114,6 +167,7 @@ const SkinAnalyzer = () => {
     setImage(null);
     setPreview(null);
     setResult(null);
+    setUseDemoMode(false);
   };
 
   const getSeverityColor = (severity: string) => {
@@ -255,9 +309,16 @@ const SkinAnalyzer = () => {
                 >
                   <Card className="border-border/50 bg-card/50 backdrop-blur-sm h-full">
                     <CardContent className="p-6">
-                      <div className="flex items-center gap-2 mb-6">
-                        <CheckCircle className="w-5 h-5 text-primary" />
-                        <h3 className="font-display text-xl font-semibold">Analysis Results</h3>
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-5 h-5 text-primary" />
+                          <h3 className="font-display text-xl font-semibold">Analysis Results</h3>
+                        </div>
+                        {useDemoMode && (
+                          <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-500 rounded-full">
+                            Demo Mode
+                          </span>
+                        )}
                       </div>
 
                       {/* Primary Result */}
