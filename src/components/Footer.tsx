@@ -1,16 +1,12 @@
 import { Activity, Heart } from "lucide-react";
-
 const Footer = () => {
-  return (
-    <footer id="about" className="relative py-16 px-4 border-t border-border/50">
+  return <footer id="about" className="relative py-16 px-4 border-t border-border/50">
       <div className="max-w-6xl mx-auto">
         <div className="grid md:grid-cols-3 gap-12 mb-12">
           {/* Brand */}
           <div>
-            <a href="#home" className="flex items-center gap-2 mb-4">
-              <Activity className="w-6 h-6 text-primary" />
-              <span className="font-display font-bold text-lg">
-                Derm<span className="text-primary">AI</span>
+            <a href="#home" className="flex items-center gap-2 mb-4">Medibot​<Activity className="w-6 h-6 text-primary" />
+              <span className="font-display font-bold text-lg">Medi​<span className="text-primary">​</span>
               </span>
             </a>
             <p className="text-sm text-muted-foreground leading-relaxed">
@@ -48,8 +44,6 @@ const Footer = () => {
           </p>
         </div>
       </div>
-    </footer>
-  );
+    </footer>;
 };
-
 export default Footer;
