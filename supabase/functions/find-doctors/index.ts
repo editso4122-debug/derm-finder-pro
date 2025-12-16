@@ -66,21 +66,36 @@ serve(async (req) => {
 
     const results = await actorRunResponse.json();
     console.log("Apify results count:", results?.length || 0);
+    
+    // Log first result to debug field names
+    if (results && results.length > 0) {
+      console.log("Sample result fields:", JSON.stringify(Object.keys(results[0])));
+    }
 
     // Format the results
     const doctors = [];
     if (results && results.length > 0) {
       for (const place of results.slice(0, 5)) {
+        // Construct Google Maps URL from placeId if url is empty
+        let googleMapsLink = null;
+        if (place.url && place.url.length > 0) {
+          googleMapsLink = place.url;
+        } else if (place.placeId) {
+          googleMapsLink = `https://www.google.com/maps/place/?q=place_id:${place.placeId}`;
+        } else if (place.location?.lat && place.location?.lng) {
+          googleMapsLink = `https://www.google.com/maps?q=${place.location.lat},${place.location.lng}`;
+        }
+        
         doctors.push({
           name: place.title || place.name || "Unknown",
           specialty: "Dermatologist",
-          address: place.address || place.street || "Address not available",
-          city: place.city || city || "",
-          phone: place.phone || place.phoneUnformatted || null,
-          googleMapsLink: place.url || place.googleMapsUri || null,
-          rating: place.totalScore || place.rating || null,
-          reviewCount: place.reviewsCount || place.reviews || null,
-          workingHours: place.openingHours || place.workHours || null,
+          address: place.address || place.street || place.location?.address || "Address not available",
+          city: place.city || place.location?.city || city || "",
+          phone: place.phone || place.phoneUnformatted || place.telephone || null,
+          googleMapsLink: googleMapsLink,
+          rating: place.totalScore || place.rating || place.stars || null,
+          reviewCount: place.reviewsCount || place.reviews || place.userRatingsTotal || null,
+          workingHours: place.openingHours || place.workHours || place.hours || null,
         });
       }
     }
