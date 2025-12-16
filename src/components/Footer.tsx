@@ -5,8 +5,8 @@ const Footer = () => {
         <div className="grid md:grid-cols-3 gap-12 mb-12">
           {/* Brand */}
           <div>
-            <a href="#home" className="flex items-center gap-2 mb-4">Medibot​<Activity className="w-6 h-6 text-primary" />
-              <span className="font-display font-bold text-lg">Medi​<span className="text-primary">​</span>
+            <a href="#home" className="flex items-center gap-2 mb-4">​<Activity className="w-6 h-6 text-primary" />
+              <span className="font-display font-bold text-lg">Medi​bot<span className="text-primary">​</span>
               </span>
             </a>
             <p className="text-sm text-muted-foreground leading-relaxed">
@@ -40,7 +40,7 @@ const Footer = () => {
         <div className="pt-8 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <p>© {new Date().getFullYear()} DermAI. All rights reserved.</p>
           <p className="flex items-center gap-1">
-            Made with <Heart className="w-4 h-4 text-destructive" /> using AI
+            Made with <Heart className="w-4 h-4 text-destructive" /> ​by team innovertex   
           </p>
         </div>
       </div>
