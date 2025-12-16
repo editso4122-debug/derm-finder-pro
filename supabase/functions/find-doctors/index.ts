@@ -12,69 +12,80 @@ serve(async (req) => {
   }
 
   try {
-    const { zipCode, city } = await req.json();
+    const { pinCode, city } = await req.json();
 
-    if (!zipCode && !city) {
+    if (!pinCode && !city) {
       return new Response(
-        JSON.stringify({ error: "Please provide a zip code or city" }),
+        JSON.stringify({ error: "Please provide a pin code or city" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Build NPI Registry API URL
-    const params = new URLSearchParams({
-      version: "2.1",
-      enumeration_type: "NPI-1", // Individual providers
-      taxonomy_description: "Dermatology",
-      limit: "10",
-    });
-
-    if (zipCode) {
-      // Take first 5 digits for US zip codes, or use as-is for others
-      params.append("postal_code", zipCode.substring(0, 5));
+    const APIFY_API_KEY = Deno.env.get("APIFY_API_KEY");
+    if (!APIFY_API_KEY) {
+      console.error("APIFY_API_KEY not configured");
+      return new Response(
+        JSON.stringify({ error: "API configuration error" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
+    // Build search query for dermatologists in India
+    let searchQuery = "dermatologist";
     if (city) {
-      params.append("city", city);
+      searchQuery += ` in ${city}, India`;
+    } else if (pinCode) {
+      searchQuery += ` in ${pinCode}, India`;
     }
 
-    console.log("Searching NPI Registry:", params.toString());
+    console.log("Searching Apify Google Maps:", searchQuery);
 
-    const response = await fetch(
-      `https://npiregistry.cms.hhs.gov/api/?${params.toString()}`
+    // Start Apify Google Maps Scraper actor
+    const actorRunResponse = await fetch(
+      `https://api.apify.com/v2/acts/compass~crawler-google-places/run-sync-get-dataset-items?token=${APIFY_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          searchStringsArray: [searchQuery],
+          maxCrawledPlacesPerSearch: 5,
+          language: "en",
+          deeperCityScrape: false,
+          skipClosedPlaces: false,
+        }),
+      }
     );
 
-    if (!response.ok) {
-      console.error("NPI API error:", response.status);
-      throw new Error("Failed to fetch from NPI Registry");
+    if (!actorRunResponse.ok) {
+      const errorText = await actorRunResponse.text();
+      console.error("Apify API error:", actorRunResponse.status, errorText);
+      throw new Error("Failed to fetch from Apify");
     }
 
-    const data = await response.json();
-    
+    const results = await actorRunResponse.json();
+    console.log("Apify results count:", results?.length || 0);
+
     // Format the results
     const doctors = [];
-    if (data.results && data.results.length > 0) {
-      for (const result of data.results) {
-        const basic = result.basic || {};
-        const address = result.addresses?.find((a: any) => a.address_purpose === "LOCATION") || 
-                       result.addresses?.[0] || {};
-        
-        const firstName = basic.first_name || "";
-        const lastName = basic.last_name || "";
-        const credential = basic.credential || "";
-        
+    if (results && results.length > 0) {
+      for (const place of results.slice(0, 5)) {
         doctors.push({
-          name: `Dr. ${firstName} ${lastName}${credential ? `, ${credential}` : ""}`,
-          specialty: result.taxonomies?.[0]?.desc || "Dermatology",
-          address: address.address_1 || "Address not available",
-          city: address.city || "",
-          state: address.state || "",
-          zip: address.postal_code?.substring(0, 5) || "",
-          phone: address.telephone_number || "Not available",
+          name: place.title || place.name || "Unknown",
+          specialty: "Dermatologist",
+          address: place.address || place.street || "Address not available",
+          city: place.city || city || "",
+          phone: place.phone || place.phoneUnformatted || null,
+          googleMapsLink: place.url || place.googleMapsUri || null,
+          rating: place.totalScore || place.rating || null,
+          reviewCount: place.reviewsCount || place.reviews || null,
+          workingHours: place.openingHours || place.workHours || null,
         });
       }
     }
 
-    console.log(`Found ${doctors.length} doctors`);
+    console.log(`Found ${doctors.length} dermatologists`);
 
     return new Response(
       JSON.stringify({ doctors }),
