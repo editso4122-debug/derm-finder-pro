@@ -4,6 +4,7 @@ import Hero from "@/components/Hero";
 import SkinAnalyzer from "@/components/SkinAnalyzer";
 import DoctorFinder from "@/components/DoctorFinder";
 import Footer from "@/components/Footer";
+import CustomerCare from "@/components/CustomerCare";
 
 const Index = () => {
   return (
@@ -18,6 +19,7 @@ const Index = () => {
       </main>
       
       <Footer />
+      <CustomerCare />
     </div>
   );
 };
