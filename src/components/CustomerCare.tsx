@@ -145,35 +145,20 @@ const CustomerCare = () => {
       });
 
       if (error) {
-        // Check if it's the Resend domain verification error
-        const errorMessage = error.message || "";
-        if (errorMessage.includes("testing emails") || errorMessage.includes("verify a domain")) {
-          setTimeout(() => {
-            addMessage(
-              "bot",
-              `Thank you for reporting your issue! We've recorded your concern:\n\n"${reportedIssue}"\n\nNote: Our email system is currently in testing mode. Our team has been notified and will review your issue. For immediate assistance, please contact us at mr.unknown2174@gmail.com.\n\nIs there anything else I can help you with?`
-            );
-            setIsReportingIssue(false);
-            setReportedIssue("");
-            setEmail("");
-          }, 500);
-          toast.info("Issue recorded! Email delivery is limited during testing.");
-          return;
-        }
         throw error;
       }
 
       setTimeout(() => {
         addMessage(
           "bot",
-          `Thank you! We've sent a confirmation email to ${email}. Our team will review your issue and get back to you soon.\n\nIs there anything else I can help you with?`
+          `Thank you! Your issue has been reported and our team has been notified. We'll review it and contact you at ${email} soon.\n\nIs there anything else I can help you with?`
         );
         setIsReportingIssue(false);
         setReportedIssue("");
         setEmail("");
       }, 500);
 
-      toast.success("Email sent successfully!");
+      toast.success("Issue reported successfully!");
     } catch (error: any) {
       console.error("Error sending email:", error);
       addMessage(
