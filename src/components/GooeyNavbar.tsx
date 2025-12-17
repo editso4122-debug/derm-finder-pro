@@ -78,7 +78,7 @@ const GooeyNavbar = () => {
                 }} />
                 </div>
                 <span className="font-display font-bold text-xl tracking-tight">
-                  Derm<span className="text-primary">​bot</span>
+                  ​medi<span className="text-primary">​bot</span>
                 </span>
               </motion.a>
 
