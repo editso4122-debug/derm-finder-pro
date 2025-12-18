@@ -17,50 +17,7 @@ interface AnalysisResult {
   predictions: Array<{ disease: string; confidence: number }>;
 }
 
-// Demo analysis function when backend is not available
-const getDemoAnalysis = (symptoms: string): AnalysisResult => {
-  const lowerSymptoms = symptoms.toLowerCase();
-  
-  // Simple symptom-based matching for demo
-  let condition = "Contact Dermatitis";
-  let confidence = 68.5;
-  let severity = "Low";
-  
-  if (lowerSymptoms.includes("itch") || lowerSymptoms.includes("red")) {
-    condition = "Atopic Dermatitis";
-    confidence = 72.3;
-  } else if (lowerSymptoms.includes("white") || lowerSymptoms.includes("patch")) {
-    condition = "Vitiligo";
-    confidence = 65.8;
-  } else if (lowerSymptoms.includes("acne") || lowerSymptoms.includes("pimple")) {
-    condition = "Acne Vulgaris";
-    confidence = 78.2;
-  } else if (lowerSymptoms.includes("scale") || lowerSymptoms.includes("flaky")) {
-    condition = "Psoriasis Vulgaris";
-    confidence = 70.1;
-  }
-
-  return {
-    condition,
-    confidence,
-    description: `Possible condition: ${condition}. This is not a diagnosis.`,
-    severity,
-    suggestedDoctor: "Dermatologist",
-    symptomAnalysis: `Based on your description of "${symptoms}", the AI model suggests this could be ${condition}. The visual features and symptoms you described are commonly associated with this condition. However, only a qualified dermatologist can provide an accurate diagnosis.`,
-    recommendations: [
-      "This is a DEMO analysis - connect your Flask backend for real AI analysis.",
-      "This is not a medical diagnosis.",
-      "Consult a dermatologist for confirmation.",
-      "Avoid self-medicating.",
-      "Monitor the area for changes."
-    ],
-    predictions: [
-      { disease: condition, confidence: confidence / 100 },
-      { disease: "Contact Dermatitis", confidence: 0.15 },
-      { disease: "Eczema", confidence: 0.08 },
-    ]
-  };
-};
+// REMOVED: getDemoAnalysis function - all predictions must come from real ML model only
 
 const SkinAnalyzer = () => {
   const [image, setImage] = useState<File | null>(null);
@@ -68,8 +25,10 @@ const SkinAnalyzer = () => {
   const [symptoms, setSymptoms] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [useDemoMode, setUseDemoMode] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+
+  // REMOVED: useDemoMode state - no demo/fallback mode allowed
 
   const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,6 +44,7 @@ const SkinAnalyzer = () => {
       setImage(file);
       setPreview(URL.createObjectURL(file));
       setResult(null);
+      setError(null);
     }
   }, [toast]);
 
@@ -95,6 +55,7 @@ const SkinAnalyzer = () => {
       setImage(file);
       setPreview(URL.createObjectURL(file));
       setResult(null);
+      setError(null);
     }
   }, []);
 
@@ -118,13 +79,15 @@ const SkinAnalyzer = () => {
     }
 
     setIsAnalyzing(true);
+    setError(null);
+    setResult(null);
     
     try {
       const formData = new FormData();
       formData.append("file", image);
       formData.append("symptoms", symptoms);
 
-      // Try backend first, fallback to demo
+      // STRICTLY use Flask backend - no fallback/demo logic
       const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
       
       const response = await fetch(`${API_URL}/analyze`, {
@@ -134,29 +97,27 @@ const SkinAnalyzer = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Analysis failed");
+        // Return actual error from backend - no fake results
+        throw new Error(errorData.error || `Analysis failed with status ${response.status}`);
       }
 
       const data = await response.json();
       setResult(data);
-      setUseDemoMode(false);
       
       toast({
         title: "Analysis Complete",
         description: `Detected: ${data.condition} (${data.confidence}% confidence)`,
       });
-    } catch (error) {
-      console.error("Analysis error:", error);
-      
-      // Use demo mode as fallback
-      const demoResult = getDemoAnalysis(symptoms);
-      setResult(demoResult);
-      setUseDemoMode(true);
+    } catch (err) {
+      // REMOVED: Demo mode fallback - if backend fails, show error only
+      const errorMessage = err instanceof Error ? err.message : "Analysis failed";
+      console.error("Analysis error:", errorMessage);
+      setError(errorMessage);
       
       toast({
-        title: "Demo Mode Active",
-        description: "Backend not available. Showing demo analysis.",
-        variant: "default",
+        title: "Analysis Failed",
+        description: errorMessage,
+        variant: "destructive",
       });
     } finally {
       setIsAnalyzing(false);
@@ -167,7 +128,7 @@ const SkinAnalyzer = () => {
     setImage(null);
     setPreview(null);
     setResult(null);
-    setUseDemoMode(false);
+    setError(null);
   };
 
   const getSeverityColor = (severity: string) => {
@@ -227,7 +188,7 @@ const SkinAnalyzer = () => {
                         <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg">
                           <div className="text-center">
                             <Scan className="w-12 h-12 text-primary mx-auto mb-2 animate-pulse" />
-                            <p className="text-sm text-muted-foreground">Analyzing...</p>
+                            <p className="text-sm text-muted-foreground">Analyzing with ML Model...</p>
                           </div>
                         </div>
                       )}
@@ -280,7 +241,7 @@ const SkinAnalyzer = () => {
                   {isAnalyzing ? (
                     <>
                       <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Analyzing...
+                      Running ML Model...
                     </>
                   ) : (
                     <>
@@ -300,7 +261,34 @@ const SkinAnalyzer = () => {
             viewport={{ once: true }}
           >
             <AnimatePresence mode="wait">
-              {result ? (
+              {error ? (
+                /* Error State - REMOVED: Demo fallback, shows actual error */
+                <motion.div
+                  key="error"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                >
+                  <Card className="border-destructive/50 bg-destructive/10 backdrop-blur-sm h-full">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-2 mb-4">
+                        <AlertTriangle className="w-5 h-5 text-destructive" />
+                        <h3 className="font-display text-xl font-semibold text-destructive">Analysis Failed</h3>
+                      </div>
+                      <p className="text-muted-foreground mb-4">{error}</p>
+                      <div className="p-4 rounded-xl bg-background/50 border border-border">
+                        <p className="text-sm font-medium mb-2">Troubleshooting:</p>
+                        <ul className="text-xs text-muted-foreground space-y-1">
+                          <li>• Ensure your Flask backend (app.py) is running on port 5000</li>
+                          <li>• Check that ML models are loaded successfully</li>
+                          <li>• Verify the image is a valid JPG/PNG file</li>
+                          <li>• Make sure symptoms are provided</li>
+                        </ul>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ) : result ? (
                 <motion.div
                   key="results"
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -314,11 +302,10 @@ const SkinAnalyzer = () => {
                           <CheckCircle className="w-5 h-5 text-primary" />
                           <h3 className="font-display text-xl font-semibold">Analysis Results</h3>
                         </div>
-                        {useDemoMode && (
-                          <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-500 rounded-full">
-                            Demo Mode
-                          </span>
-                        )}
+                        {/* REMOVED: Demo mode badge - only real ML results shown */}
+                        <span className="text-xs px-2 py-1 bg-primary/20 text-primary rounded-full">
+                          ML Model
+                        </span>
                       </div>
 
                       {/* Primary Result */}
@@ -349,7 +336,7 @@ const SkinAnalyzer = () => {
                       <div className="mb-6">
                         <h4 className="font-medium mb-3">Top Predictions</h4>
                         <div className="space-y-2">
-                          {result.predictions.slice(0, 3).map((pred, i) => (
+                          {result.predictions.slice(0, 3).map((pred) => (
                             <div
                               key={pred.disease}
                               className="flex items-center justify-between p-2 rounded-lg bg-secondary/30"
