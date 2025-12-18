@@ -1,15 +1,23 @@
 import { Activity, Heart, Twitter, Linkedin, Github, Instagram } from "lucide-react";
-
 const Footer = () => {
-  const socialLinks = [
-    { icon: Twitter, href: "https://twitter.com/innovertex", label: "Twitter" },
-    { icon: Linkedin, href: "https://linkedin.com/company/innovertex", label: "LinkedIn" },
-    { icon: Github, href: "https://github.com/innovertex", label: "GitHub" },
-    { icon: Instagram, href: "https://instagram.com/innovertex", label: "Instagram" },
-  ];
-
-  return (
-    <footer id="about" className="relative py-16 px-4 border-t border-border/50">
+  const socialLinks = [{
+    icon: Twitter,
+    href: "https://twitter.com/innovertex",
+    label: "Twitter"
+  }, {
+    icon: Linkedin,
+    href: "https://linkedin.com/company/innovertex",
+    label: "LinkedIn"
+  }, {
+    icon: Github,
+    href: "https://github.com/innovertex",
+    label: "GitHub"
+  }, {
+    icon: Instagram,
+    href: "https://instagram.com/innovertex",
+    label: "Instagram"
+  }];
+  return <footer id="about" className="relative py-16 px-4 border-t border-border/50">
       <div className="max-w-6xl mx-auto">
         <div className="grid md:grid-cols-4 gap-12 mb-12">
           {/* Brand */}
@@ -40,18 +48,9 @@ const Footer = () => {
           <div>
             <h4 className="font-display font-semibold mb-4">Connect With Us</h4>
             <div className="flex gap-3">
-              {socialLinks.map((social) => (
-                <a
-                  key={social.label}
-                  href={social.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-all duration-300"
-                  aria-label={social.label}
-                >
+              {socialLinks.map(social => <a key={social.label} href={social.href} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-all duration-300" aria-label={social.label}>
                   <social.icon className="w-5 h-5" />
-                </a>
-              ))}
+                </a>)}
             </div>
           </div>
 
@@ -73,8 +72,6 @@ const Footer = () => {
           </p>
         </div>
       </div>
-    </footer>
-  );
+    </footer>;
 };
-
 export default Footer;
