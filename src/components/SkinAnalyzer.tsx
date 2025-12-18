@@ -88,11 +88,14 @@ const SkinAnalyzer = () => {
       formData.append("symptoms", symptoms);
 
       // STRICTLY use Flask backend - no fallback/demo logic
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+      const API_URL = "https://interchurch-dane-erosible.ngrok-free.dev";
       
       const response = await fetch(`${API_URL}/analyze`, {
         method: "POST",
         body: formData,
+        headers: {
+          "ngrok-skip-browser-warning": "true"
+        }
       });
 
       if (!response.ok) {
