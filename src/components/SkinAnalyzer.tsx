@@ -87,15 +87,16 @@ const SkinAnalyzer = () => {
       formData.append("file", image);
       formData.append("symptoms", symptoms);
 
-      // STRICTLY use Flask backend - no fallback/demo logic
-      const API_URL = "https://interchurch-dane-erosible.ngrok-free.dev";
-      
-      const response = await fetch(`${API_URL}/analyze`, {
+      // Use the built-in backend function (avoids ngrok/CORS issues)
+      const API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/skin-analyze`;
+
+      const response = await fetch(API_URL, {
         method: "POST",
         body: formData,
         headers: {
-          "ngrok-skip-browser-warning": "true"
-        }
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
       });
 
       if (!response.ok) {
@@ -282,10 +283,10 @@ const SkinAnalyzer = () => {
                       <div className="p-4 rounded-xl bg-background/50 border border-border">
                         <p className="text-sm font-medium mb-2">Troubleshooting:</p>
                         <ul className="text-xs text-muted-foreground space-y-1">
-                          <li>• Ensure your Flask backend (app.py) is running on port 5000</li>
-                          <li>• Check that ML models are loaded successfully</li>
-                          <li>• Verify the image is a valid JPG/PNG file</li>
-                          <li>• Make sure symptoms are provided</li>
+                          <li>• Check your internet connection and try again</li>
+                          <li>• Try a smaller JPG/PNG image (clear, well-lit, in focus)</li>
+                          <li>• Ensure your symptoms description is included</li>
+                          <li>• If it persists, refresh the page and retry</li>
                         </ul>
                       </div>
                     </CardContent>
