@@ -23,7 +23,17 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
   return btoa(binary);
 }
 
-const systemPrompt = `You are a careful dermatology triage assistant.
+const getSystemPrompt = (language: string) => {
+  const langInstruction = language === "hindi" 
+    ? "IMPORTANT: You MUST respond entirely in Hindi (हिंदी). All text including condition name, description, recommendations must be in Hindi."
+    : language === "marathi"
+    ? "IMPORTANT: You MUST respond entirely in Marathi (मराठी). All text including condition name, description, recommendations must be in Marathi."
+    : "Respond in English.";
+
+  return `You are a careful dermatology triage assistant.
+${langInstruction}
+You can understand symptoms written in Hindi, Marathi, or English.
+
 Given ONE skin image and the user's symptom description, return ONLY valid JSON with this schema:
 {
   "condition": string,
@@ -39,6 +49,7 @@ Rules:
 - Be medically cautious; include 'seek urgent care' in recommendations if severe/red-flag.
 - Do not mention being an AI.
 - Do not include markdown or extra keys.`;
+};
 
 serve(async (req) => {
   // CORS preflight
@@ -65,6 +76,7 @@ serve(async (req) => {
     const form = await req.formData();
     const file = form.get("file");
     const symptoms = String(form.get("symptoms") ?? "").trim();
+    const language = String(form.get("language") ?? "english").toLowerCase();
 
     if (!file || !(file instanceof File)) {
       return new Response(JSON.stringify({ error: "Image file is required" }), {
@@ -97,7 +109,7 @@ serve(async (req) => {
         temperature: 0.2,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: getSystemPrompt(language) },
           {
             role: "user",
             content: [

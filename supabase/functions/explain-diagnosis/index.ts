@@ -29,7 +29,13 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { disease, confidence, symptoms, question } = body;
+    const { disease, confidence, symptoms, question, language = "english" } = body;
+    
+    const langInstruction = language === "hindi" 
+      ? "IMPORTANT: You MUST respond entirely in Hindi (हिंदी). Understand questions in Hindi, Marathi, or English but always respond in Hindi."
+      : language === "marathi"
+      ? "IMPORTANT: You MUST respond entirely in Marathi (मराठी). Understand questions in Hindi, Marathi, or English but always respond in Marathi."
+      : "Respond in English. You can understand questions in Hindi, Marathi, or English.";
 
     if (!disease) {
       return new Response(JSON.stringify({ error: "Disease name is required" }), {
@@ -45,6 +51,8 @@ serve(async (req) => {
     if (question) {
       // Q&A mode - answer user's follow-up question
       systemPrompt = `You are a helpful medical information assistant. The user has been diagnosed with "${disease}" by a skin disease ML model with ${confidence || "unknown"}% confidence.
+
+${langInstruction}
 
 Important rules:
 - Only answer questions related to the diagnosed condition "${disease}"
@@ -64,6 +72,8 @@ Their question: ${question}`;
 3. Provide general care recommendations
 4. Suggest when to see a dermatologist
 5. Add relevant precautions
+
+${langInstruction}
 
 Important: This is educational information only. Always recommend professional medical consultation.`;
 

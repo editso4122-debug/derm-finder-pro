@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Camera, Loader2, AlertTriangle, CheckCircle, X, Scan, MessageCircle, Send } from "lucide-react";
+import { Upload, Camera, Loader2, AlertTriangle, CheckCircle, X, Scan, MessageCircle, Send, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+type Language = "english" | "hindi" | "marathi";
+
+const languageLabels: Record<Language, string> = {
+  english: "English",
+  hindi: "हिंदी (Hindi)",
+  marathi: "मराठी (Marathi)",
+};
 
 interface AnalysisResult {
   condition: string;
@@ -42,6 +57,9 @@ const SkinAnalyzer = () => {
   const [qaMessages, setQaMessages] = useState<QAMessage[]>([]);
   const [question, setQuestion] = useState("");
   const [isAskingQuestion, setIsAskingQuestion] = useState(false);
+  
+  // Language state
+  const [language, setLanguage] = useState<Language>("english");
 
   // Camera state
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -162,6 +180,7 @@ const SkinAnalyzer = () => {
           confidence: result.confidence,
           symptoms,
           question: userQuestion,
+          language,
         },
       });
 
@@ -210,6 +229,7 @@ const SkinAnalyzer = () => {
       const formData = new FormData();
       formData.append("file", image);
       formData.append("symptoms", symptoms);
+      formData.append("language", language);
 
       // Call skin-analyze edge function (uses Gemini)
       const response = await fetch(
@@ -299,6 +319,34 @@ const SkinAnalyzer = () => {
               </p>
             </div>
           </div>
+        </motion.div>
+
+        {/* Language Selector */}
+        <motion.div
+          className="mb-8 max-w-3xl mx-auto"
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+        >
+          <div className="flex items-center justify-center gap-3">
+            <Globe className="w-5 h-5 text-primary" />
+            <span className="text-sm font-medium">Select Language:</span>
+            <Select value={language} onValueChange={(val) => setLanguage(val as Language)}>
+              <SelectTrigger className="w-48 bg-secondary/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(languageLabels) as Language[]).map((lang) => (
+                  <SelectItem key={lang} value={lang}>
+                    {languageLabels[lang]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground text-center mt-2">
+            Bot will respond in your selected language. You can write symptoms in Hindi, Marathi, or English.
+          </p>
         </motion.div>
 
         <div className="grid lg:grid-cols-2 gap-8">
