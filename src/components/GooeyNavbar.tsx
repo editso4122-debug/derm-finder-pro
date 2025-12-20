@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Activity, Menu, X } from "lucide-react";
+import { Activity, Menu, X, Pill } from "lucide-react";
+
 const GooeyNavbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const navItems = [{
@@ -108,15 +110,32 @@ const GooeyNavbar = () => {
                   </motion.a>)}
               </div>
 
-              {/* CTA Button */}
-              <motion.a href="#analyze" className="hidden md:flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground font-medium text-sm rounded-full shadow-lg shadow-primary/25" whileHover={{
-              scale: 1.05,
-              boxShadow: "0 0 30px hsl(174 72% 50% / 0.4)"
-            }} whileTap={{
-              scale: 0.95
-            }}>
-                Start Analysis
-              </motion.a>
+              {/* CTA Buttons */}
+              <div className="hidden md:flex items-center gap-3">
+                <Link to="/medicine-scanner">
+                  <motion.div
+                    className="flex items-center gap-2 px-4 py-2 bg-secondary text-foreground font-medium text-sm rounded-full border border-primary/30"
+                    whileHover={{
+                      scale: 1.05,
+                      borderColor: "hsl(174 72% 50% / 0.6)"
+                    }}
+                    whileTap={{
+                      scale: 0.95
+                    }}
+                  >
+                    <Pill className="w-4 h-4 text-primary" />
+                    Scan Medicine
+                  </motion.div>
+                </Link>
+                <motion.a href="#analyze" className="flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground font-medium text-sm rounded-full shadow-lg shadow-primary/25" whileHover={{
+                scale: 1.05,
+                boxShadow: "0 0 30px hsl(174 72% 50% / 0.4)"
+              }} whileTap={{
+                scale: 0.95
+              }}>
+                  Start Analysis
+                </motion.a>
+              </div>
 
               {/* Mobile menu button */}
               <motion.button className="md:hidden p-2 text-foreground" onClick={() => setIsOpen(!isOpen)} whileTap={{
@@ -137,6 +156,14 @@ const GooeyNavbar = () => {
               {navItems.map(item => <a key={item.name} href={item.href} className="block px-4 py-3 text-foreground hover:bg-primary/10 rounded-lg transition-colors" onClick={() => setIsOpen(false)}>
                   {item.name}
                 </a>)}
+              <Link 
+                to="/medicine-scanner" 
+                className="flex items-center gap-2 px-4 py-3 text-foreground hover:bg-primary/10 rounded-lg transition-colors"
+                onClick={() => setIsOpen(false)}
+              >
+                <Pill className="w-4 h-4 text-primary" />
+                Scan Medicine
+              </Link>
               <a href="#analyze" className="block px-4 py-3 bg-primary text-primary-foreground text-center rounded-lg font-medium" onClick={() => setIsOpen(false)}>
                 Start Analysis
               </a>
