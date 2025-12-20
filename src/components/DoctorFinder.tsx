@@ -231,18 +231,34 @@ const DoctorFinder = () => {
                           )}
                         </div>
 
-                        {/* Google Maps Button */}
-                        {doctor.googleMapsLink && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full mt-3"
-                            onClick={() => window.open(doctor.googleMapsLink!, "_blank")}
-                          >
-                            <ExternalLink className="w-4 h-4 mr-2" />
-                            Get Location
-                          </Button>
-                        )}
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 mt-3">
+                          {/* Call Doctor Button */}
+                          {doctor.phone && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => window.open(`tel:${doctor.phone}`, "_self")}
+                            >
+                              <Phone className="w-4 h-4 mr-2" />
+                              Call
+                            </Button>
+                          )}
+
+                          {/* Google Maps Button */}
+                          {doctor.googleMapsLink && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => window.open(doctor.googleMapsLink!, "_blank")}
+                            >
+                              <ExternalLink className="w-4 h-4 mr-2" />
+                              Location
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
