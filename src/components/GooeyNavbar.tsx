@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Menu, X, Pill } from "lucide-react";
-import medibotLogo from "@/assets/medibot-logo.jpg";
+import { Activity, Menu, X, Pill } from "lucide-react";
 
 const GooeyNavbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -70,7 +69,16 @@ const GooeyNavbar = () => {
             }} whileTap={{
               scale: 0.95
             }}>
-                <img src={medibotLogo} alt="Medibot Logo" className="w-8 h-8 rounded-full object-cover" />
+                <div className="relative">
+                  <Activity className="w-8 h-8 text-primary" />
+                  <motion.div className="absolute inset-0 bg-primary/30 rounded-full blur-md" animate={{
+                  scale: [1, 1.3, 1],
+                  opacity: [0.5, 0.8, 0.5]
+                }} transition={{
+                  duration: 2,
+                  repeat: Infinity
+                }} />
+                </div>
                 <span className="font-display font-bold text-xl tracking-tight">
                   ​medi<span className="text-primary">​bot</span>
                 </span>
