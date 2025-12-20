@@ -14,7 +14,7 @@ const Footer = () => {
     label: "GitHub"
   }, {
     icon: Instagram,
-    href: "https://instagram.com/innovertex",
+    href: "https://www.instagram.com/more.om_180?igsh=ZTFiaDNhcWh2Z3Nu",
     label: "Instagram"
   }];
   return <footer id="about" className="relative py-16 px-4 border-t border-border/50">
