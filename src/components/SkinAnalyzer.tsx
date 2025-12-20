@@ -1,38 +1,61 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Camera, Loader2, AlertTriangle, CheckCircle, X, Scan, Settings } from "lucide-react";
+import { Upload, Camera, Loader2, AlertTriangle, CheckCircle, X, Scan, Settings, MessageCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
-interface AnalysisResult {
-  condition: string;
+interface MLPrediction {
+  disease: string;
   confidence: number;
-  description: string;
-  severity: string;
-  suggestedDoctor: string;
-  symptomAnalysis: string;
-  recommendations: string[];
-  predictions: Array<{ disease: string; confidence: number }>;
+  predictions?: Array<{ disease: string; confidence: number }>;
 }
 
-// Default to ngrok URL - user must provide their own when running Flask backend
+interface GeminiExplanation {
+  explanation: string;
+  causes: string[];
+  recommendations: string[];
+  whenToSeeDoctor: string;
+  precautions: string[];
+  severity: string;
+  suggestedDoctor: string;
+}
+
+interface AnalysisResult {
+  prediction: MLPrediction;
+  explanation: GeminiExplanation | null;
+}
+
+interface QAMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// Default to empty - user must provide their Flask backend URL
 const DEFAULT_BACKEND_URL = "";
+const CONFIDENCE_THRESHOLD = 60;
 
 const SkinAnalyzer = () => {
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [symptoms, setSymptoms] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [backendUrl, setBackendUrl] = useState(() => {
-    // Persist backend URL in localStorage
     return localStorage.getItem("skin-analyzer-backend-url") || DEFAULT_BACKEND_URL;
   });
   const [showSettings, setShowSettings] = useState(!backendUrl);
+  
+  // Q&A state
+  const [qaMessages, setQaMessages] = useState<QAMessage[]>([]);
+  const [question, setQuestion] = useState("");
+  const [isAskingQuestion, setIsAskingQuestion] = useState(false);
+  
   const { toast } = useToast();
 
   const handleBackendUrlChange = (url: string) => {
@@ -55,6 +78,7 @@ const SkinAnalyzer = () => {
       setPreview(URL.createObjectURL(file));
       setResult(null);
       setError(null);
+      setQaMessages([]);
     }
   }, [toast]);
 
@@ -66,8 +90,115 @@ const SkinAnalyzer = () => {
       setPreview(URL.createObjectURL(file));
       setResult(null);
       setError(null);
+      setQaMessages([]);
     }
   }, []);
+
+  // Step 1: Call Flask backend for ML prediction
+  const getMLPrediction = async (formData: FormData): Promise<MLPrediction> => {
+    const rawBase = backendUrl.trim();
+    const baseWithScheme = /^https?:\/\//i.test(rawBase) ? rawBase : `http://${rawBase}`;
+    const base = baseWithScheme.replace(/\/$/, "");
+    const API_URL = `${base}/analyze`;
+
+    const isHttpsApp = window.location.protocol === "https:";
+    const isLocalBackend = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?/i.test(baseWithScheme);
+
+    if (isHttpsApp && API_URL.startsWith("http://")) {
+      throw new Error(
+        isLocalBackend
+          ? "This site is HTTPS, so it cannot call your local HTTP backend. Use an HTTPS tunnel (ngrok) or run frontend locally."
+          : "This site is HTTPS, so it cannot call an HTTP backend. Please use an HTTPS backend URL."
+      );
+    }
+
+    const response = await fetch(API_URL, {
+      method: "POST",
+      body: formData,
+    });
+
+    const text = await response.text();
+    let parsed;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      throw new Error("Backend returned invalid JSON. If using ngrok, ensure the tunnel is running.");
+    }
+
+    if (!response.ok) {
+      const backendError = parsed?.error || `ML prediction failed with status ${response.status}`;
+      throw new Error(backendError);
+    }
+
+    if (!parsed || typeof parsed !== "object") {
+      throw new Error("Backend returned an invalid response format.");
+    }
+
+    return {
+      disease: parsed.condition || parsed.disease || "Unknown",
+      confidence: parsed.confidence || 0,
+      predictions: parsed.predictions || [],
+    };
+  };
+
+  // Step 2: Call edge function for Gemini explanation
+  const getGeminiExplanation = async (
+    disease: string,
+    confidence: number,
+    symptoms: string
+  ): Promise<GeminiExplanation | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke("explain-diagnosis", {
+        body: { disease, confidence, symptoms },
+      });
+
+      if (error) {
+        console.error("Explanation error:", error);
+        return null;
+      }
+
+      return data as GeminiExplanation;
+    } catch (err) {
+      console.error("Failed to get explanation:", err);
+      return null;
+    }
+  };
+
+  // Q&A: Ask follow-up questions
+  const askQuestion = async () => {
+    if (!question.trim() || !result?.prediction) return;
+
+    const userQuestion = question.trim();
+    setQuestion("");
+    setQaMessages((prev) => [...prev, { role: "user", content: userQuestion }]);
+    setIsAskingQuestion(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("explain-diagnosis", {
+        body: {
+          disease: result.prediction.disease,
+          confidence: result.prediction.confidence,
+          symptoms,
+          question: userQuestion,
+        },
+      });
+
+      if (error) throw error;
+
+      setQaMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: data?.answer || "I couldn't generate an answer. Please try again." },
+      ]);
+    } catch (err) {
+      console.error("Q&A error:", err);
+      setQaMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Sorry, I couldn't answer that question. Please try again." },
+      ]);
+    } finally {
+      setIsAskingQuestion(false);
+    }
+  };
 
   const handleAnalyze = async () => {
     if (!backendUrl.trim()) {
@@ -101,76 +232,59 @@ const SkinAnalyzer = () => {
     setIsAnalyzing(true);
     setError(null);
     setResult(null);
-    
+    setQaMessages([]);
+
     try {
+      // Step 1: Get ML prediction from Flask backend
       const formData = new FormData();
       formData.append("file", image);
       formData.append("symptoms", symptoms);
 
-      const rawBase = backendUrl.trim();
-      const baseWithScheme = /^https?:\/\//i.test(rawBase) ? rawBase : `http://${rawBase}`;
-      const base = baseWithScheme.replace(/\/$/, "");
-      const API_URL = `${base}/analyze`;
+      const prediction = await getMLPrediction(formData);
 
-      const isHttpsApp = window.location.protocol === "https:";
-      const isLocalBackend = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?/i.test(baseWithScheme);
-
-      // Hosted HTTPS pages cannot call HTTP backends (mixed content), and localhost isn't reachable for other users.
-      if (isHttpsApp && API_URL.startsWith("http://")) {
-        throw new Error(
-          isLocalBackend
-            ? "This site is HTTPS, so it can't call your local HTTP backend (localhost). Use an HTTPS tunnel URL (e.g., ngrok) or run the frontend locally."
-            : "This site is HTTPS, so it can't call an HTTP backend. Please use an HTTPS backend URL."
-        );
+      // Check confidence threshold
+      if (prediction.confidence < CONFIDENCE_THRESHOLD) {
+        setResult({ prediction, explanation: null });
+        toast({
+          title: "Low Confidence Result",
+          description: `The model could not confidently identify the condition (${prediction.confidence}% confidence).`,
+          variant: "destructive",
+        });
+        setIsAnalyzing(false);
+        return;
       }
 
-      const response = await fetch(API_URL, {
-        method: "POST",
-        body: formData,
-      });
+      // Update UI with prediction immediately
+      setResult({ prediction, explanation: null });
+      setIsAnalyzing(false);
 
-      const text = await response.text();
-      const parsed = (() => {
-        try {
-          return text ? JSON.parse(text) : null;
-        } catch {
-          return null;
-        }
-      })();
-
-      if (!response.ok) {
-        const backendError =
-          parsed && typeof parsed === "object" && "error" in (parsed as Record<string, unknown>)
-            ? String((parsed as Record<string, unknown>).error)
-            : null;
-        throw new Error(backendError || `Analysis failed with status ${response.status}`);
-      }
-
-      if (!parsed || typeof parsed !== "object") {
-        throw new Error(
-          "Backend returned a non-JSON response. If you're using ngrok, ensure the tunnel is running and not showing an interstitial warning page."
-        );
-      }
-
-      const data = parsed as AnalysisResult;
-      setResult(data);
-      
       toast({
-        title: "Analysis Complete",
-        description: `Detected: ${data.condition} (${data.confidence}% confidence)`,
+        title: "ML Analysis Complete",
+        description: `Detected: ${prediction.disease} (${prediction.confidence}% confidence)`,
       });
+
+      // Step 2: Get Gemini explanation (async, non-blocking)
+      setIsLoadingExplanation(true);
+      const explanation = await getGeminiExplanation(
+        prediction.disease,
+        prediction.confidence,
+        symptoms
+      );
+
+      setResult((prev) => (prev ? { ...prev, explanation } : null));
+      setIsLoadingExplanation(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Analysis failed";
       console.error("Analysis error:", errorMessage);
       setError(errorMessage);
-      
+      setIsAnalyzing(false);
+      setIsLoadingExplanation(false);
+
       toast({
         title: "Analysis Failed",
         description: errorMessage,
         variant: "destructive",
       });
-    } finally {
-      setIsAnalyzing(false);
     }
   };
 
@@ -179,11 +293,13 @@ const SkinAnalyzer = () => {
     setPreview(null);
     setResult(null);
     setError(null);
+    setQaMessages([]);
   };
 
   const getSeverityColor = (severity: string) => {
-    if (severity.toLowerCase().includes("high")) return "text-destructive";
-    if (severity.toLowerCase().includes("moderate")) return "text-yellow-500";
+    const s = severity?.toLowerCase() || "";
+    if (s.includes("high")) return "text-destructive";
+    if (s.includes("moderate")) return "text-yellow-500";
     return "text-primary";
   };
 
@@ -200,8 +316,27 @@ const SkinAnalyzer = () => {
             AI Skin <span className="text-primary">Analysis</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Upload an image and describe your symptoms for AI-powered skin condition analysis
+            Upload an image for ML-powered skin condition detection with AI explanations
           </p>
+        </motion.div>
+
+        {/* Medical Disclaimer */}
+        <motion.div
+          className="mb-8 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30 max-w-3xl mx-auto"
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-yellow-500 mb-1">Medical Disclaimer</p>
+              <p className="text-muted-foreground">
+                This is an assistive tool, not a substitute for professional medical diagnosis. 
+                Always consult a qualified dermatologist for proper diagnosis and treatment.
+              </p>
+            </div>
+          </div>
         </motion.div>
 
         <div className="grid lg:grid-cols-2 gap-8">
@@ -222,7 +357,7 @@ const SkinAnalyzer = () => {
                     <Settings className="w-4 h-4" />
                     {showSettings ? "Hide Settings" : "Backend Settings"}
                   </button>
-                  
+
                   {showSettings && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
@@ -231,7 +366,7 @@ const SkinAnalyzer = () => {
                       className="mt-3 p-4 rounded-xl bg-secondary/30 border border-border/50"
                     >
                       <label className="block text-sm font-medium mb-2">
-                        ML Backend URL
+                        ML Backend URL (Flask + EfficientNet-B0)
                       </label>
                       <Input
                         value={backendUrl}
@@ -240,7 +375,7 @@ const SkinAnalyzer = () => {
                         className="bg-background/50"
                       />
                       <p className="text-xs text-muted-foreground mt-2">
-                        Enter your Flask backend URL (ngrok or deployed server running EfficientNet-B0)
+                        Your Flask backend running EfficientNet-B0 for skin disease prediction
                       </p>
                     </motion.div>
                   )}
@@ -285,12 +420,8 @@ const SkinAnalyzer = () => {
                       >
                         <Upload className="w-8 h-8 text-primary" />
                       </motion.div>
-                      <p className="text-foreground font-medium mb-1">
-                        Drop your image here
-                      </p>
-                      <p className="text-muted-foreground text-sm">
-                        or click to browse
-                      </p>
+                      <p className="text-foreground font-medium mb-1">Drop your image here</p>
+                      <p className="text-muted-foreground text-sm">or click to browse</p>
                       <input
                         type="file"
                         accept="image/*"
@@ -303,9 +434,7 @@ const SkinAnalyzer = () => {
 
                 {/* Symptoms Input */}
                 <div className="mt-6">
-                  <label className="block text-sm font-medium mb-2">
-                    Describe Your Symptoms
-                  </label>
+                  <label className="block text-sm font-medium mb-2">Describe Your Symptoms</label>
                   <Textarea
                     value={symptoms}
                     onChange={(e) => setSymptoms(e.target.value)}
@@ -345,7 +474,6 @@ const SkinAnalyzer = () => {
           >
             <AnimatePresence mode="wait">
               {error ? (
-                /* Error State - REMOVED: Demo fallback, shows actual error */
                 <motion.div
                   key="error"
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -356,16 +484,18 @@ const SkinAnalyzer = () => {
                     <CardContent className="p-6">
                       <div className="flex items-center gap-2 mb-4">
                         <AlertTriangle className="w-5 h-5 text-destructive" />
-                        <h3 className="font-display text-xl font-semibold text-destructive">Analysis Failed</h3>
+                        <h3 className="font-display text-xl font-semibold text-destructive">
+                          Analysis Failed
+                        </h3>
                       </div>
                       <p className="text-muted-foreground mb-4">{error}</p>
                       <div className="p-4 rounded-xl bg-background/50 border border-border">
                         <p className="text-sm font-medium mb-2">Troubleshooting:</p>
                         <ul className="text-xs text-muted-foreground space-y-1">
-                          <li>• Check your internet connection and try again</li>
-                          <li>• Try a smaller JPG/PNG image (clear, well-lit, in focus)</li>
-                          <li>• Ensure your symptoms description is included</li>
-                          <li>• If it persists, refresh the page and retry</li>
+                          <li>• Ensure your Flask backend is running</li>
+                          <li>• Check that ngrok tunnel is active (if using ngrok)</li>
+                          <li>• Verify the backend URL in settings</li>
+                          <li>• Try a clear, well-lit JPG/PNG image</li>
                         </ul>
                       </div>
                     </CardContent>
@@ -377,78 +507,179 @@ const SkinAnalyzer = () => {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
+                  className="space-y-4"
                 >
-                  <Card className="border-border/50 bg-card/50 backdrop-blur-sm h-full">
+                  {/* ML Prediction Card */}
+                  <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
                     <CardContent className="p-6">
-                      <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
                           <CheckCircle className="w-5 h-5 text-primary" />
-                          <h3 className="font-display text-xl font-semibold">Analysis Results</h3>
+                          <h3 className="font-display text-xl font-semibold">ML Prediction</h3>
                         </div>
-                        {/* REMOVED: Demo mode badge - only real ML results shown */}
                         <span className="text-xs px-2 py-1 bg-primary/20 text-primary rounded-full">
-                          ML Model
+                          EfficientNet-B0
                         </span>
                       </div>
 
-                      {/* Primary Result */}
-                      <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 mb-6">
-                        <p className="text-sm text-muted-foreground mb-1">Detected Condition</p>
-                        <p className="text-2xl font-display font-bold text-primary capitalize">
-                          {result.condition}
-                        </p>
-                        <div className="flex items-center gap-4 mt-2">
-                          <span className="text-sm">
-                            Confidence: <span className="font-semibold">{result.confidence}%</span>
-                          </span>
-                          <span className={`text-sm ${getSeverityColor(result.severity)}`}>
-                            Severity: <span className="font-semibold">{result.severity}</span>
-                          </span>
+                      {result.prediction.confidence < CONFIDENCE_THRESHOLD ? (
+                        <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+                          <p className="text-yellow-500 font-medium">Low Confidence Result</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            The model could not confidently identify the skin condition 
+                            ({result.prediction.confidence}% confidence). Please consult a dermatologist.
+                          </p>
                         </div>
-                      </div>
-
-                      {/* AI Explanation */}
-                      <div className="mb-6">
-                        <h4 className="font-medium mb-2">AI Analysis</h4>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          {result.symptomAnalysis}
-                        </p>
-                      </div>
+                      ) : (
+                        <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+                          <p className="text-sm text-muted-foreground mb-1">Detected Condition</p>
+                          <p className="text-2xl font-display font-bold text-primary capitalize">
+                            {result.prediction.disease}
+                          </p>
+                          <p className="text-sm mt-2">
+                            Confidence: <span className="font-semibold">{result.prediction.confidence}%</span>
+                          </p>
+                        </div>
+                      )}
 
                       {/* Top Predictions */}
-                      <div className="mb-6">
-                        <h4 className="font-medium mb-3">Top Predictions</h4>
-                        <div className="space-y-2">
-                          {result.predictions.slice(0, 3).map((pred) => (
-                            <div
-                              key={pred.disease}
-                              className="flex items-center justify-between p-2 rounded-lg bg-secondary/30"
-                            >
-                              <span className="text-sm capitalize">{pred.disease}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {(pred.confidence * 100).toFixed(1)}%
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Recommendations */}
-                      <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
-                          <div>
-                            <p className="font-medium text-yellow-500 text-sm mb-2">Important Notice</p>
-                            <ul className="text-xs text-muted-foreground space-y-1">
-                              {result.recommendations.map((rec, i) => (
-                                <li key={i}>• {rec}</li>
-                              ))}
-                            </ul>
+                      {result.prediction.predictions && result.prediction.predictions.length > 0 && (
+                        <div className="mt-4">
+                          <h4 className="font-medium mb-2 text-sm">Top Predictions</h4>
+                          <div className="space-y-1">
+                            {result.prediction.predictions.slice(0, 3).map((pred, i) => (
+                              <div
+                                key={i}
+                                className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 text-sm"
+                              >
+                                <span className="capitalize">{pred.disease}</span>
+                                <span className="text-muted-foreground">
+                                  {(pred.confidence * 100).toFixed(1)}%
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      </div>
+                      )}
                     </CardContent>
                   </Card>
+
+                  {/* Gemini Explanation Card */}
+                  {result.prediction.confidence >= CONFIDENCE_THRESHOLD && (
+                    <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="font-display text-lg font-semibold">AI Explanation</h3>
+                          <span className="text-xs px-2 py-1 bg-secondary text-muted-foreground rounded-full">
+                            Gemini
+                          </span>
+                        </div>
+
+                        {isLoadingExplanation ? (
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span className="text-sm">Generating explanation...</span>
+                          </div>
+                        ) : result.explanation ? (
+                          <div className="space-y-4">
+                            <p className="text-sm text-muted-foreground leading-relaxed">
+                              {result.explanation.explanation}
+                            </p>
+
+                            {result.explanation.severity && (
+                              <p className={`text-sm ${getSeverityColor(result.explanation.severity)}`}>
+                                Severity: <span className="font-semibold">{result.explanation.severity}</span>
+                              </p>
+                            )}
+
+                            {result.explanation.recommendations?.length > 0 && (
+                              <div className="p-3 rounded-lg bg-secondary/30">
+                                <p className="text-sm font-medium mb-2">Recommendations:</p>
+                                <ul className="text-xs text-muted-foreground space-y-1">
+                                  {result.explanation.recommendations.map((rec, i) => (
+                                    <li key={i}>• {rec}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {result.explanation.whenToSeeDoctor && (
+                              <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                                <p className="text-sm font-medium text-yellow-500 mb-1">
+                                  When to See a Doctor
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {result.explanation.whenToSeeDoctor}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Explanation not available.
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Q&A Section */}
+                  {result.prediction.confidence >= CONFIDENCE_THRESHOLD && (
+                    <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+                      <CardContent className="p-6">
+                        <div className="flex items-center gap-2 mb-4">
+                          <MessageCircle className="w-5 h-5 text-primary" />
+                          <h3 className="font-display text-lg font-semibold">Ask Questions</h3>
+                        </div>
+
+                        {/* Q&A Messages */}
+                        {qaMessages.length > 0 && (
+                          <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                            {qaMessages.map((msg, i) => (
+                              <div
+                                key={i}
+                                className={`p-3 rounded-lg text-sm ${
+                                  msg.role === "user"
+                                    ? "bg-primary/10 ml-8"
+                                    : "bg-secondary/50 mr-8"
+                                }`}
+                              >
+                                {msg.content}
+                              </div>
+                            ))}
+                            {isAskingQuestion && (
+                              <div className="flex items-center gap-2 text-muted-foreground p-3">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span className="text-sm">Thinking...</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Question Input */}
+                        <div className="flex gap-2">
+                          <Input
+                            value={question}
+                            onChange={(e) => setQuestion(e.target.value)}
+                            placeholder={`Ask about ${result.prediction.disease}...`}
+                            className="flex-1 bg-secondary/50"
+                            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && askQuestion()}
+                            disabled={isAskingQuestion}
+                          />
+                          <Button
+                            onClick={askQuestion}
+                            disabled={!question.trim() || isAskingQuestion}
+                            size="icon"
+                          >
+                            <Send className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Ask follow-up questions about {result.prediction.disease}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
                 </motion.div>
               ) : (
                 <motion.div
@@ -462,18 +693,20 @@ const SkinAnalyzer = () => {
                     <CardContent className="text-center p-12">
                       <motion.div
                         className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6"
-                        animate={{ 
-                          boxShadow: ["0 0 0 0 hsl(174 72% 50% / 0.2)", "0 0 0 20px hsl(174 72% 50% / 0)", "0 0 0 0 hsl(174 72% 50% / 0.2)"]
+                        animate={{
+                          boxShadow: [
+                            "0 0 0 0 hsl(174 72% 50% / 0.2)",
+                            "0 0 0 20px hsl(174 72% 50% / 0)",
+                            "0 0 0 0 hsl(174 72% 50% / 0.2)",
+                          ],
                         }}
                         transition={{ duration: 2, repeat: Infinity }}
                       >
                         <Camera className="w-10 h-10 text-primary" />
                       </motion.div>
-                      <h3 className="font-display text-xl font-semibold mb-2">
-                        Ready to Analyze
-                      </h3>
+                      <h3 className="font-display text-xl font-semibold mb-2">Ready to Analyze</h3>
                       <p className="text-muted-foreground text-sm max-w-xs mx-auto">
-                        Upload a clear image of the affected skin area and describe your symptoms to get started
+                        Upload a clear image of the affected skin area and describe your symptoms
                       </p>
                     </CardContent>
                   </Card>

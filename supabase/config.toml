@@ -2,3 +2,12 @@ project_id = "ijzxoiebaunrwthryuev"
 
 [functions.send-customer-email]
 verify_jwt = false
+
+[functions.skin-analyze]
+verify_jwt = false
+
+[functions.find-doctors]
+verify_jwt = false
+
+[functions.explain-diagnosis]
+verify_jwt = false
