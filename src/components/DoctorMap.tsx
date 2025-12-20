@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { motion } from 'framer-motion';
@@ -13,7 +13,7 @@ interface DoctorMapProps {
   mapboxToken: string;
 }
 
-const DoctorMap = ({ doctorName, doctorAddress, onClose, mapboxToken }: DoctorMapProps) => {
+const DoctorMap = forwardRef<HTMLDivElement, DoctorMapProps>(({ doctorName, doctorAddress, onClose, mapboxToken }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
@@ -269,6 +269,8 @@ const DoctorMap = ({ doctorName, doctorAddress, onClose, mapboxToken }: DoctorMa
       </motion.div>
     </motion.div>
   );
-};
+});
+
+DoctorMap.displayName = 'DoctorMap';
 
 export default DoctorMap;
