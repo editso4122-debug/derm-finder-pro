@@ -107,23 +107,52 @@ const SkinAnalyzer = () => {
       formData.append("file", image);
       formData.append("symptoms", symptoms);
 
-      // Call user's Flask backend with EfficientNet-B0 + FLAN-T5
-      const API_URL = `${backendUrl.replace(/\/$/, "")}/analyze`;
+      const rawBase = backendUrl.trim();
+      const baseWithScheme = /^https?:\/\//i.test(rawBase) ? rawBase : `http://${rawBase}`;
+      const base = baseWithScheme.replace(/\/$/, "");
+      const API_URL = `${base}/analyze`;
+
+      const isHttpsApp = window.location.protocol === "https:";
+      const isLocalBackend = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?/i.test(baseWithScheme);
+
+      // Hosted HTTPS pages cannot call HTTP backends (mixed content), and localhost isn't reachable for other users.
+      if (isHttpsApp && API_URL.startsWith("http://")) {
+        throw new Error(
+          isLocalBackend
+            ? "This site is HTTPS, so it can't call your local HTTP backend (localhost). Use an HTTPS tunnel URL (e.g., ngrok) or run the frontend locally."
+            : "This site is HTTPS, so it can't call an HTTP backend. Please use an HTTPS backend URL."
+        );
+      }
 
       const response = await fetch(API_URL, {
         method: "POST",
         body: formData,
-        headers: {
-          "ngrok-skip-browser-warning": "true",
-        },
       });
 
+      const text = await response.text();
+      const parsed = (() => {
+        try {
+          return text ? JSON.parse(text) : null;
+        } catch {
+          return null;
+        }
+      })();
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Analysis failed with status ${response.status}`);
+        const backendError =
+          parsed && typeof parsed === "object" && "error" in (parsed as Record<string, unknown>)
+            ? String((parsed as Record<string, unknown>).error)
+            : null;
+        throw new Error(backendError || `Analysis failed with status ${response.status}`);
       }
 
-      const data = await response.json();
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error(
+          "Backend returned a non-JSON response. If you're using ngrok, ensure the tunnel is running and not showing an interstitial warning page."
+        );
+      }
+
+      const data = parsed as AnalysisResult;
       setResult(data);
       
       toast({
