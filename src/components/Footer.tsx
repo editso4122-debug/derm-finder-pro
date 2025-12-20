@@ -1,4 +1,6 @@
-import { Activity, Heart, Twitter, Linkedin, Github, Instagram } from "lucide-react";
+import { Heart, Twitter, Linkedin, Github, Instagram } from "lucide-react";
+import medibotLogo from "@/assets/medibot-logo.jpg";
+
 const Footer = () => {
   const socialLinks = [{
     icon: Twitter,
@@ -23,7 +25,7 @@ const Footer = () => {
           {/* Brand */}
           <div>
             <a href="#home" className="flex items-center gap-2 mb-4">
-              <Activity className="w-6 h-6 text-primary" />
+              <img src={medibotLogo} alt="Medibot Logo" className="w-6 h-6 rounded-full object-cover" />
               <span className="font-display font-bold text-lg">
                 Medibot<span className="text-primary"></span>
               </span>
