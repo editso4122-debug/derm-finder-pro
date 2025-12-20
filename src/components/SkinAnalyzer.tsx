@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Camera, Loader2, AlertTriangle, CheckCircle, X, Scan, Settings, MessageCircle, Send } from "lucide-react";
+import { Upload, Camera, Loader2, AlertTriangle, CheckCircle, X, Scan, MessageCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -8,25 +8,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-interface MLPrediction {
-  disease: string;
+interface AnalysisResult {
+  condition: string;
   confidence: number;
-  predictions?: Array<{ disease: string; confidence: number }>;
-}
-
-interface GeminiExplanation {
-  explanation: string;
-  causes: string[];
-  recommendations: string[];
-  whenToSeeDoctor: string;
-  precautions: string[];
+  description: string;
   severity: string;
   suggestedDoctor: string;
-}
-
-interface AnalysisResult {
-  prediction: MLPrediction;
-  explanation: GeminiExplanation | null;
+  symptomAnalysis: string;
+  recommendations: string[];
+  predictions: Array<{ disease: string; confidence: number }>;
 }
 
 interface QAMessage {
@@ -34,22 +24,13 @@ interface QAMessage {
   content: string;
 }
 
-// Default to empty - user must provide their Flask backend URL
-const DEFAULT_BACKEND_URL = "";
-const CONFIDENCE_THRESHOLD = 60;
-
 const SkinAnalyzer = () => {
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [symptoms, setSymptoms] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [backendUrl, setBackendUrl] = useState(() => {
-    return localStorage.getItem("skin-analyzer-backend-url") || DEFAULT_BACKEND_URL;
-  });
-  const [showSettings, setShowSettings] = useState(!backendUrl);
   
   // Q&A state
   const [qaMessages, setQaMessages] = useState<QAMessage[]>([]);
@@ -57,11 +38,6 @@ const SkinAnalyzer = () => {
   const [isAskingQuestion, setIsAskingQuestion] = useState(false);
   
   const { toast } = useToast();
-
-  const handleBackendUrlChange = (url: string) => {
-    setBackendUrl(url);
-    localStorage.setItem("skin-analyzer-backend-url", url);
-  };
 
   const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -94,79 +70,9 @@ const SkinAnalyzer = () => {
     }
   }, []);
 
-  // Step 1: Call Flask backend for ML prediction
-  const getMLPrediction = async (formData: FormData): Promise<MLPrediction> => {
-    const rawBase = backendUrl.trim();
-    const baseWithScheme = /^https?:\/\//i.test(rawBase) ? rawBase : `http://${rawBase}`;
-    const base = baseWithScheme.replace(/\/$/, "");
-    const API_URL = `${base}/analyze`;
-
-    const isHttpsApp = window.location.protocol === "https:";
-    const isLocalBackend = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?/i.test(baseWithScheme);
-
-    if (isHttpsApp && API_URL.startsWith("http://")) {
-      throw new Error(
-        isLocalBackend
-          ? "This site is HTTPS, so it cannot call your local HTTP backend. Use an HTTPS tunnel (ngrok) or run frontend locally."
-          : "This site is HTTPS, so it cannot call an HTTP backend. Please use an HTTPS backend URL."
-      );
-    }
-
-    const response = await fetch(API_URL, {
-      method: "POST",
-      body: formData,
-    });
-
-    const text = await response.text();
-    let parsed;
-    try {
-      parsed = text ? JSON.parse(text) : null;
-    } catch {
-      throw new Error("Backend returned invalid JSON. If using ngrok, ensure the tunnel is running.");
-    }
-
-    if (!response.ok) {
-      const backendError = parsed?.error || `ML prediction failed with status ${response.status}`;
-      throw new Error(backendError);
-    }
-
-    if (!parsed || typeof parsed !== "object") {
-      throw new Error("Backend returned an invalid response format.");
-    }
-
-    return {
-      disease: parsed.condition || parsed.disease || "Unknown",
-      confidence: parsed.confidence || 0,
-      predictions: parsed.predictions || [],
-    };
-  };
-
-  // Step 2: Call edge function for Gemini explanation
-  const getGeminiExplanation = async (
-    disease: string,
-    confidence: number,
-    symptoms: string
-  ): Promise<GeminiExplanation | null> => {
-    try {
-      const { data, error } = await supabase.functions.invoke("explain-diagnosis", {
-        body: { disease, confidence, symptoms },
-      });
-
-      if (error) {
-        console.error("Explanation error:", error);
-        return null;
-      }
-
-      return data as GeminiExplanation;
-    } catch (err) {
-      console.error("Failed to get explanation:", err);
-      return null;
-    }
-  };
-
   // Q&A: Ask follow-up questions
   const askQuestion = async () => {
-    if (!question.trim() || !result?.prediction) return;
+    if (!question.trim() || !result) return;
 
     const userQuestion = question.trim();
     setQuestion("");
@@ -176,8 +82,8 @@ const SkinAnalyzer = () => {
     try {
       const { data, error } = await supabase.functions.invoke("explain-diagnosis", {
         body: {
-          disease: result.prediction.disease,
-          confidence: result.prediction.confidence,
+          disease: result.condition,
+          confidence: result.confidence,
           symptoms,
           question: userQuestion,
         },
@@ -201,16 +107,6 @@ const SkinAnalyzer = () => {
   };
 
   const handleAnalyze = async () => {
-    if (!backendUrl.trim()) {
-      setShowSettings(true);
-      toast({
-        title: "Backend URL required",
-        description: "Please configure your ML backend URL (ngrok or deployed server).",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (!image) {
       toast({
         title: "No image selected",
@@ -235,56 +131,46 @@ const SkinAnalyzer = () => {
     setQaMessages([]);
 
     try {
-      // Step 1: Get ML prediction from Flask backend
       const formData = new FormData();
       formData.append("file", image);
       formData.append("symptoms", symptoms);
 
-      const prediction = await getMLPrediction(formData);
-
-      // Check confidence threshold
-      if (prediction.confidence < CONFIDENCE_THRESHOLD) {
-        setResult({ prediction, explanation: null });
-        toast({
-          title: "Low Confidence Result",
-          description: `The model could not confidently identify the condition (${prediction.confidence}% confidence).`,
-          variant: "destructive",
-        });
-        setIsAnalyzing(false);
-        return;
-      }
-
-      // Update UI with prediction immediately
-      setResult({ prediction, explanation: null });
-      setIsAnalyzing(false);
-
-      toast({
-        title: "ML Analysis Complete",
-        description: `Detected: ${prediction.disease} (${prediction.confidence}% confidence)`,
-      });
-
-      // Step 2: Get Gemini explanation (async, non-blocking)
-      setIsLoadingExplanation(true);
-      const explanation = await getGeminiExplanation(
-        prediction.disease,
-        prediction.confidence,
-        symptoms
+      // Call skin-analyze edge function (uses Gemini)
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/skin-analyze`,
+        {
+          method: "POST",
+          body: formData,
+          headers: {
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+        }
       );
 
-      setResult((prev) => (prev ? { ...prev, explanation } : null));
-      setIsLoadingExplanation(false);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `Analysis failed with status ${response.status}`);
+      }
+
+      setResult(data);
+
+      toast({
+        title: "Analysis Complete",
+        description: `Detected: ${data.condition} (${data.confidence}% confidence)`,
+      });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Analysis failed";
       console.error("Analysis error:", errorMessage);
       setError(errorMessage);
-      setIsAnalyzing(false);
-      setIsLoadingExplanation(false);
 
       toast({
         title: "Analysis Failed",
         description: errorMessage,
         variant: "destructive",
       });
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -316,7 +202,7 @@ const SkinAnalyzer = () => {
             AI Skin <span className="text-primary">Analysis</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Upload an image for ML-powered skin condition detection with AI explanations
+            Upload an image and describe your symptoms for AI-powered skin condition analysis
           </p>
         </motion.div>
 
@@ -348,39 +234,6 @@ const SkinAnalyzer = () => {
           >
             <Card className="border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
               <CardContent className="p-6">
-                {/* Backend URL Settings */}
-                <div className="mb-6">
-                  <button
-                    onClick={() => setShowSettings(!showSettings)}
-                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <Settings className="w-4 h-4" />
-                    {showSettings ? "Hide Settings" : "Backend Settings"}
-                  </button>
-
-                  {showSettings && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="mt-3 p-4 rounded-xl bg-secondary/30 border border-border/50"
-                    >
-                      <label className="block text-sm font-medium mb-2">
-                        ML Backend URL (Flask + EfficientNet-B0)
-                      </label>
-                      <Input
-                        value={backendUrl}
-                        onChange={(e) => handleBackendUrlChange(e.target.value)}
-                        placeholder="https://your-ngrok-url.ngrok-free.app"
-                        className="bg-background/50"
-                      />
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Your Flask backend running EfficientNet-B0 for skin disease prediction
-                      </p>
-                    </motion.div>
-                  )}
-                </div>
-
                 {/* Image Upload Area */}
                 <div
                   className={`relative border-2 border-dashed rounded-xl transition-all duration-300 ${
@@ -406,7 +259,7 @@ const SkinAnalyzer = () => {
                         <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg">
                           <div className="text-center">
                             <Scan className="w-12 h-12 text-primary mx-auto mb-2 animate-pulse" />
-                            <p className="text-sm text-muted-foreground">Running EfficientNet-B0...</p>
+                            <p className="text-sm text-muted-foreground">Analyzing with AI...</p>
                           </div>
                         </div>
                       )}
@@ -453,7 +306,7 @@ const SkinAnalyzer = () => {
                   {isAnalyzing ? (
                     <>
                       <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Running ML Model...
+                      Analyzing...
                     </>
                   ) : (
                     <>
@@ -492,10 +345,10 @@ const SkinAnalyzer = () => {
                       <div className="p-4 rounded-xl bg-background/50 border border-border">
                         <p className="text-sm font-medium mb-2">Troubleshooting:</p>
                         <ul className="text-xs text-muted-foreground space-y-1">
-                          <li>• Ensure your Flask backend is running</li>
-                          <li>• Check that ngrok tunnel is active (if using ngrok)</li>
-                          <li>• Verify the backend URL in settings</li>
+                          <li>• Check your internet connection</li>
                           <li>• Try a clear, well-lit JPG/PNG image</li>
+                          <li>• Ensure symptoms are described</li>
+                          <li>• Refresh the page and try again</li>
                         </ul>
                       </div>
                     </CardContent>
@@ -509,45 +362,49 @@ const SkinAnalyzer = () => {
                   exit={{ opacity: 0, scale: 0.95 }}
                   className="space-y-4"
                 >
-                  {/* ML Prediction Card */}
+                  {/* Main Result Card */}
                   <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
                           <CheckCircle className="w-5 h-5 text-primary" />
-                          <h3 className="font-display text-xl font-semibold">ML Prediction</h3>
+                          <h3 className="font-display text-xl font-semibold">Analysis Results</h3>
                         </div>
                         <span className="text-xs px-2 py-1 bg-primary/20 text-primary rounded-full">
-                          EfficientNet-B0
+                          AI Powered
                         </span>
                       </div>
 
-                      {result.prediction.confidence < CONFIDENCE_THRESHOLD ? (
-                        <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
-                          <p className="text-yellow-500 font-medium">Low Confidence Result</p>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            The model could not confidently identify the skin condition 
-                            ({result.prediction.confidence}% confidence). Please consult a dermatologist.
-                          </p>
+                      {/* Primary Result */}
+                      <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 mb-4">
+                        <p className="text-sm text-muted-foreground mb-1">Detected Condition</p>
+                        <p className="text-2xl font-display font-bold text-primary capitalize">
+                          {result.condition}
+                        </p>
+                        <div className="flex items-center gap-4 mt-2">
+                          <span className="text-sm">
+                            Confidence: <span className="font-semibold">{result.confidence}%</span>
+                          </span>
+                          <span className={`text-sm ${getSeverityColor(result.severity)}`}>
+                            Severity: <span className="font-semibold">{result.severity}</span>
+                          </span>
                         </div>
-                      ) : (
-                        <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
-                          <p className="text-sm text-muted-foreground mb-1">Detected Condition</p>
-                          <p className="text-2xl font-display font-bold text-primary capitalize">
-                            {result.prediction.disease}
-                          </p>
-                          <p className="text-sm mt-2">
-                            Confidence: <span className="font-semibold">{result.prediction.confidence}%</span>
-                          </p>
-                        </div>
-                      )}
+                      </div>
+
+                      {/* AI Analysis */}
+                      <div className="mb-4">
+                        <h4 className="font-medium mb-2">Analysis</h4>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          {result.symptomAnalysis}
+                        </p>
+                      </div>
 
                       {/* Top Predictions */}
-                      {result.prediction.predictions && result.prediction.predictions.length > 0 && (
-                        <div className="mt-4">
+                      {result.predictions && result.predictions.length > 0 && (
+                        <div className="mb-4">
                           <h4 className="font-medium mb-2 text-sm">Top Predictions</h4>
                           <div className="space-y-1">
-                            {result.prediction.predictions.slice(0, 3).map((pred, i) => (
+                            {result.predictions.slice(0, 3).map((pred, i) => (
                               <div
                                 key={i}
                                 className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 text-sm"
@@ -561,125 +418,87 @@ const SkinAnalyzer = () => {
                           </div>
                         </div>
                       )}
+
+                      {/* Recommendations */}
+                      {result.recommendations && result.recommendations.length > 0 && (
+                        <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-medium text-yellow-500 text-sm mb-2">Recommendations</p>
+                              <ul className="text-xs text-muted-foreground space-y-1">
+                                {result.recommendations.map((rec, i) => (
+                                  <li key={i}>• {rec}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {result.suggestedDoctor && (
+                        <p className="text-sm mt-4 text-muted-foreground">
+                          Suggested specialist: <span className="font-medium text-foreground">{result.suggestedDoctor}</span>
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
 
-                  {/* Gemini Explanation Card */}
-                  {result.prediction.confidence >= CONFIDENCE_THRESHOLD && (
-                    <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="font-display text-lg font-semibold">AI Explanation</h3>
-                          <span className="text-xs px-2 py-1 bg-secondary text-muted-foreground rounded-full">
-                            Gemini
-                          </span>
-                        </div>
-
-                        {isLoadingExplanation ? (
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span className="text-sm">Generating explanation...</span>
-                          </div>
-                        ) : result.explanation ? (
-                          <div className="space-y-4">
-                            <p className="text-sm text-muted-foreground leading-relaxed">
-                              {result.explanation.explanation}
-                            </p>
-
-                            {result.explanation.severity && (
-                              <p className={`text-sm ${getSeverityColor(result.explanation.severity)}`}>
-                                Severity: <span className="font-semibold">{result.explanation.severity}</span>
-                              </p>
-                            )}
-
-                            {result.explanation.recommendations?.length > 0 && (
-                              <div className="p-3 rounded-lg bg-secondary/30">
-                                <p className="text-sm font-medium mb-2">Recommendations:</p>
-                                <ul className="text-xs text-muted-foreground space-y-1">
-                                  {result.explanation.recommendations.map((rec, i) => (
-                                    <li key={i}>• {rec}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {result.explanation.whenToSeeDoctor && (
-                              <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                                <p className="text-sm font-medium text-yellow-500 mb-1">
-                                  When to See a Doctor
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {result.explanation.whenToSeeDoctor}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            Explanation not available.
-                          </p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-
                   {/* Q&A Section */}
-                  {result.prediction.confidence >= CONFIDENCE_THRESHOLD && (
-                    <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-                      <CardContent className="p-6">
-                        <div className="flex items-center gap-2 mb-4">
-                          <MessageCircle className="w-5 h-5 text-primary" />
-                          <h3 className="font-display text-lg font-semibold">Ask Questions</h3>
-                        </div>
+                  <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-2 mb-4">
+                        <MessageCircle className="w-5 h-5 text-primary" />
+                        <h3 className="font-display text-lg font-semibold">Ask Questions</h3>
+                      </div>
 
-                        {/* Q&A Messages */}
-                        {qaMessages.length > 0 && (
-                          <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
-                            {qaMessages.map((msg, i) => (
-                              <div
-                                key={i}
-                                className={`p-3 rounded-lg text-sm ${
-                                  msg.role === "user"
-                                    ? "bg-primary/10 ml-8"
-                                    : "bg-secondary/50 mr-8"
-                                }`}
-                              >
-                                {msg.content}
-                              </div>
-                            ))}
-                            {isAskingQuestion && (
-                              <div className="flex items-center gap-2 text-muted-foreground p-3">
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                <span className="text-sm">Thinking...</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Question Input */}
-                        <div className="flex gap-2">
-                          <Input
-                            value={question}
-                            onChange={(e) => setQuestion(e.target.value)}
-                            placeholder={`Ask about ${result.prediction.disease}...`}
-                            className="flex-1 bg-secondary/50"
-                            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && askQuestion()}
-                            disabled={isAskingQuestion}
-                          />
-                          <Button
-                            onClick={askQuestion}
-                            disabled={!question.trim() || isAskingQuestion}
-                            size="icon"
-                          >
-                            <Send className="w-4 h-4" />
-                          </Button>
+                      {/* Q&A Messages */}
+                      {qaMessages.length > 0 && (
+                        <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                          {qaMessages.map((msg, i) => (
+                            <div
+                              key={i}
+                              className={`p-3 rounded-lg text-sm ${
+                                msg.role === "user"
+                                  ? "bg-primary/10 ml-8"
+                                  : "bg-secondary/50 mr-8"
+                              }`}
+                            >
+                              {msg.content}
+                            </div>
+                          ))}
+                          {isAskingQuestion && (
+                            <div className="flex items-center gap-2 text-muted-foreground p-3">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span className="text-sm">Thinking...</span>
+                            </div>
+                          )}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Ask follow-up questions about {result.prediction.disease}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
+                      )}
+
+                      {/* Question Input */}
+                      <div className="flex gap-2">
+                        <Input
+                          value={question}
+                          onChange={(e) => setQuestion(e.target.value)}
+                          placeholder={`Ask about ${result.condition}...`}
+                          className="flex-1 bg-secondary/50"
+                          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && askQuestion()}
+                          disabled={isAskingQuestion}
+                        />
+                        <Button
+                          onClick={askQuestion}
+                          disabled={!question.trim() || isAskingQuestion}
+                          size="icon"
+                        >
+                          <Send className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Ask follow-up questions about {result.condition}
+                      </p>
+                    </CardContent>
+                  </Card>
                 </motion.div>
               ) : (
                 <motion.div
