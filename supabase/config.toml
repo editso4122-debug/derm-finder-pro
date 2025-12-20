@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.explain-diagnosis]
 verify_jwt = false
+
+[functions.scan-medicine]
+verify_jwt = false
