@@ -1,8 +1,9 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Camera, Loader2, AlertTriangle, CheckCircle, X, Scan } from "lucide-react";
+import { Upload, Camera, Loader2, AlertTriangle, CheckCircle, X, Scan, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 
@@ -17,7 +18,8 @@ interface AnalysisResult {
   predictions: Array<{ disease: string; confidence: number }>;
 }
 
-// REMOVED: getDemoAnalysis function - all predictions must come from real ML model only
+// Default to ngrok URL - user must provide their own when running Flask backend
+const DEFAULT_BACKEND_URL = "";
 
 const SkinAnalyzer = () => {
   const [image, setImage] = useState<File | null>(null);
@@ -26,9 +28,17 @@ const SkinAnalyzer = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [backendUrl, setBackendUrl] = useState(() => {
+    // Persist backend URL in localStorage
+    return localStorage.getItem("skin-analyzer-backend-url") || DEFAULT_BACKEND_URL;
+  });
+  const [showSettings, setShowSettings] = useState(!backendUrl);
   const { toast } = useToast();
 
-  // REMOVED: useDemoMode state - no demo/fallback mode allowed
+  const handleBackendUrlChange = (url: string) => {
+    setBackendUrl(url);
+    localStorage.setItem("skin-analyzer-backend-url", url);
+  };
 
   const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -60,6 +70,16 @@ const SkinAnalyzer = () => {
   }, []);
 
   const handleAnalyze = async () => {
+    if (!backendUrl.trim()) {
+      setShowSettings(true);
+      toast({
+        title: "Backend URL required",
+        description: "Please configure your ML backend URL (ngrok or deployed server).",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!image) {
       toast({
         title: "No image selected",
@@ -87,21 +107,19 @@ const SkinAnalyzer = () => {
       formData.append("file", image);
       formData.append("symptoms", symptoms);
 
-      // Use the built-in backend function (avoids ngrok/CORS issues)
-      const API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/skin-analyze`;
+      // Call user's Flask backend with EfficientNet-B0 + FLAN-T5
+      const API_URL = `${backendUrl.replace(/\/$/, "")}/analyze`;
 
       const response = await fetch(API_URL, {
         method: "POST",
         body: formData,
         headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          "ngrok-skip-browser-warning": "true",
         },
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        // Return actual error from backend - no fake results
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `Analysis failed with status ${response.status}`);
       }
 
@@ -113,7 +131,6 @@ const SkinAnalyzer = () => {
         description: `Detected: ${data.condition} (${data.confidence}% confidence)`,
       });
     } catch (err) {
-      // REMOVED: Demo mode fallback - if backend fails, show error only
       const errorMessage = err instanceof Error ? err.message : "Analysis failed";
       console.error("Analysis error:", errorMessage);
       setError(errorMessage);
@@ -167,6 +184,39 @@ const SkinAnalyzer = () => {
           >
             <Card className="border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
               <CardContent className="p-6">
+                {/* Backend URL Settings */}
+                <div className="mb-6">
+                  <button
+                    onClick={() => setShowSettings(!showSettings)}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Settings className="w-4 h-4" />
+                    {showSettings ? "Hide Settings" : "Backend Settings"}
+                  </button>
+                  
+                  {showSettings && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mt-3 p-4 rounded-xl bg-secondary/30 border border-border/50"
+                    >
+                      <label className="block text-sm font-medium mb-2">
+                        ML Backend URL
+                      </label>
+                      <Input
+                        value={backendUrl}
+                        onChange={(e) => handleBackendUrlChange(e.target.value)}
+                        placeholder="https://your-ngrok-url.ngrok-free.app"
+                        className="bg-background/50"
+                      />
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Enter your Flask backend URL (ngrok or deployed server running EfficientNet-B0)
+                      </p>
+                    </motion.div>
+                  )}
+                </div>
+
                 {/* Image Upload Area */}
                 <div
                   className={`relative border-2 border-dashed rounded-xl transition-all duration-300 ${
@@ -192,7 +242,7 @@ const SkinAnalyzer = () => {
                         <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg">
                           <div className="text-center">
                             <Scan className="w-12 h-12 text-primary mx-auto mb-2 animate-pulse" />
-                            <p className="text-sm text-muted-foreground">Analyzing with ML Model...</p>
+                            <p className="text-sm text-muted-foreground">Running EfficientNet-B0...</p>
                           </div>
                         </div>
                       )}
