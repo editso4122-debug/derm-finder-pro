@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, MapPin, Phone, Building2, Loader2, Star, Clock, ExternalLink } from "lucide-react";
+import { Search, MapPin, Phone, Building2, Loader2, Star, Clock, Map } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import DoctorMap from "./DoctorMap";
 
+const MAPBOX_TOKEN = "YOUR_MAPBOX_TOKEN"; // Replace with your Mapbox public token
 interface Doctor {
   name: string;
   specialty: string;
@@ -25,6 +27,7 @@ const DoctorFinder = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const { toast } = useToast();
 
   const searchDoctors = async () => {
@@ -231,18 +234,16 @@ const DoctorFinder = () => {
                           )}
                         </div>
 
-                        {/* Google Maps Button */}
-                        {doctor.googleMapsLink && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full mt-3"
-                            onClick={() => window.open(doctor.googleMapsLink!, "_blank")}
-                          >
-                            <ExternalLink className="w-4 h-4 mr-2" />
-                            Get Location
-                          </Button>
-                        )}
+                        {/* View on Map Button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full mt-3"
+                          onClick={() => setSelectedDoctor(doctor)}
+                        >
+                          <Map className="w-4 h-4 mr-2" />
+                          Get Location
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -266,6 +267,18 @@ const DoctorFinder = () => {
               </p>
             </motion.div>
           ) : null}
+        </AnimatePresence>
+
+        {/* Map Modal */}
+        <AnimatePresence>
+          {selectedDoctor && (
+            <DoctorMap
+              doctorName={selectedDoctor.name}
+              doctorAddress={`${selectedDoctor.address}, ${selectedDoctor.city}`}
+              onClose={() => setSelectedDoctor(null)}
+              mapboxToken={MAPBOX_TOKEN}
+            />
+          )}
         </AnimatePresence>
       </div>
     </section>
