@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import DoctorMap from "./DoctorMap";
 
-const MAPBOX_TOKEN = "YOUR_MAPBOX_TOKEN"; // Replace with your Mapbox public token
+const MAPBOX_TOKEN = "pk.eyJ1IjoieWFhay1kcml2aW5nLWN1cnJpY3VsdW0iLCJhIjoiY2txYzJqb3FwMWZweDJwbXY0M3R5cDAzYyJ9";
 interface Doctor {
   name: string;
   specialty: string;
