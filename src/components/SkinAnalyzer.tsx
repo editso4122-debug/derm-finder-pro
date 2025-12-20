@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, Camera, Loader2, AlertTriangle, CheckCircle, X, Scan, MessageCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface AnalysisResult {
   condition: string;
@@ -36,8 +42,78 @@ const SkinAnalyzer = () => {
   const [qaMessages, setQaMessages] = useState<QAMessage[]>([]);
   const [question, setQuestion] = useState("");
   const [isAskingQuestion, setIsAskingQuestion] = useState(false);
+
+  // Camera state
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const { toast } = useToast();
+
+  // Open camera
+  const openCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+      setStream(mediaStream);
+      setIsCameraOpen(true);
+    } catch (err) {
+      console.error("Camera error:", err);
+      toast({
+        title: "Camera Access Denied",
+        description: "Please allow camera access to take a photo.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Attach stream to video element when dialog opens
+  const handleVideoRef = (video: HTMLVideoElement | null) => {
+    if (video && stream) {
+      video.srcObject = stream;
+    }
+  };
+
+  // Capture photo from video
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(video, 0, 0);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
+          setImage(file);
+          setPreview(URL.createObjectURL(blob));
+          setResult(null);
+          setError(null);
+          setQaMessages([]);
+          closeCamera();
+          toast({
+            title: "Photo Captured",
+            description: "Your photo has been captured successfully.",
+          });
+        }
+      }, "image/jpeg", 0.9);
+    }
+  };
+
+  // Close camera and stop stream
+  const closeCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+    setIsCameraOpen(false);
+  };
 
   const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -265,7 +341,7 @@ const SkinAnalyzer = () => {
                       )}
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center aspect-square cursor-pointer p-8">
+                    <div className="flex flex-col items-center justify-center aspect-square p-8">
                       <motion.div
                         className="p-4 rounded-full bg-primary/10 mb-4"
                         animate={{ scale: [1, 1.1, 1] }}
@@ -273,15 +349,30 @@ const SkinAnalyzer = () => {
                       >
                         <Upload className="w-8 h-8 text-primary" />
                       </motion.div>
-                      <p className="text-foreground font-medium mb-1">Drop your image here</p>
-                      <p className="text-muted-foreground text-sm">or click to browse</p>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageChange}
-                        className="hidden"
-                      />
-                    </label>
+                      <p className="text-foreground font-medium mb-1">Upload or capture image</p>
+                      <p className="text-muted-foreground text-sm mb-4">Choose an option below</p>
+                      
+                      <div className="flex gap-3">
+                        <label className="cursor-pointer">
+                          <Button variant="outline" size="sm" asChild>
+                            <span>
+                              <Upload className="w-4 h-4 mr-2" />
+                              Browse Files
+                            </span>
+                          </Button>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageChange}
+                            className="hidden"
+                          />
+                        </label>
+                        <Button variant="default" size="sm" onClick={openCamera}>
+                          <Camera className="w-4 h-4 mr-2" />
+                          Click Photo
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -535,6 +626,37 @@ const SkinAnalyzer = () => {
           </motion.div>
         </div>
       </div>
+
+      {/* Camera Dialog */}
+      <Dialog open={isCameraOpen} onOpenChange={(open) => !open && closeCamera()}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Take Photo</DialogTitle>
+          </DialogHeader>
+          <div className="relative">
+            <video
+              ref={(el) => {
+                (videoRef as any).current = el;
+                handleVideoRef(el);
+              }}
+              autoPlay
+              playsInline
+              muted
+              className="w-full rounded-lg bg-secondary"
+            />
+            <canvas ref={canvasRef} className="hidden" />
+          </div>
+          <div className="flex justify-center gap-3 mt-4">
+            <Button variant="outline" onClick={closeCamera}>
+              Cancel
+            </Button>
+            <Button onClick={capturePhoto}>
+              <Camera className="w-4 h-4 mr-2" />
+              Capture
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 };
