@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Activity, Menu, X, Pill } from "lucide-react";
+import { Activity, Menu, X, Pill, User } from "lucide-react";
 
 const GooeyNavbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -71,13 +71,6 @@ const GooeyNavbar = () => {
             }}>
                 <div className="relative">
                   <Activity className="w-8 h-8 text-primary" />
-                  <motion.div className="absolute inset-0 bg-primary/30 rounded-full blur-md" animate={{
-                  scale: [1, 1.3, 1],
-                  opacity: [0.5, 0.8, 0.5]
-                }} transition={{
-                  duration: 2,
-                  repeat: Infinity
-                }} />
                 </div>
                 <span className="font-display font-bold text-xl tracking-tight">
                   ​medi<span className="text-primary">​bot</span>
@@ -135,6 +128,18 @@ const GooeyNavbar = () => {
               }}>
                   Start Analysis
                 </motion.a>
+                <motion.button
+                  className="p-2 bg-secondary text-foreground rounded-full border border-primary/30"
+                  whileHover={{
+                    scale: 1.05,
+                    borderColor: "hsl(174 72% 50% / 0.6)"
+                  }}
+                  whileTap={{
+                    scale: 0.95
+                  }}
+                >
+                  <User className="w-5 h-5 text-primary" />
+                </motion.button>
               </div>
 
               {/* Mobile menu button */}
