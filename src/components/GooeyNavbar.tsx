@@ -70,7 +70,7 @@ const GooeyNavbar = () => {
               scale: 0.95
             }}>
                 <div className="relative">
-                  <Activity className="w-8 h-8 text-primary" />
+                  <User className="w-8 h-8 text-primary" />
                 </div>
                 <span className="font-display font-bold text-xl tracking-tight">
                   ​medi<span className="text-primary">​bot</span>
