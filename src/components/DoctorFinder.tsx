@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import DoctorReviewDialog from "./DoctorReviewDialog";
+import DoctorReviews from "./DoctorReviews";
 
 interface Doctor {
   name: string;
@@ -238,6 +239,13 @@ const DoctorFinder = () => {
                             </div>
                           )}
                         </div>
+
+                        {/* Patient Reviews */}
+                        <DoctorReviews 
+                          doctorName={doctor.name}
+                          doctorSpecialty={doctor.specialty}
+                          doctorLocation={doctor.city}
+                        />
 
                         {/* Action Buttons */}
                         <div className="flex flex-col gap-2 mt-3">
