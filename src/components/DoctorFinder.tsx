@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, MapPin, Phone, Building2, Loader2, Star, Clock, ExternalLink } from "lucide-react";
+import { Search, MapPin, Phone, Building2, Loader2, Star, Clock, ExternalLink, MessageSquarePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import DoctorReviewDialog from "./DoctorReviewDialog";
 
 interface Doctor {
   name: string;
@@ -25,7 +26,14 @@ const DoctorFinder = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const { toast } = useToast();
+
+  const handleOpenReviewDialog = (doctor: Doctor) => {
+    setSelectedDoctor(doctor);
+    setReviewDialogOpen(true);
+  };
 
   const searchDoctors = async () => {
     if (!pinCode && !city) {
@@ -232,32 +240,45 @@ const DoctorFinder = () => {
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="flex gap-2 mt-3">
-                          {/* Call Doctor Button */}
-                          {doctor.phone && (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="flex-1"
-                              onClick={() => window.open(`tel:${doctor.phone}`, "_self")}
-                            >
-                              <Phone className="w-4 h-4 mr-2" />
-                              Call
-                            </Button>
-                          )}
+                        <div className="flex flex-col gap-2 mt-3">
+                          <div className="flex gap-2">
+                            {/* Call Doctor Button */}
+                            {doctor.phone && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => window.open(`tel:${doctor.phone}`, "_self")}
+                              >
+                                <Phone className="w-4 h-4 mr-2" />
+                                Call
+                              </Button>
+                            )}
 
-                          {/* Google Maps Button */}
-                          {doctor.googleMapsLink && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={() => window.open(doctor.googleMapsLink!, "_blank")}
-                            >
-                              <ExternalLink className="w-4 h-4 mr-2" />
-                              Location
-                            </Button>
-                          )}
+                            {/* Google Maps Button */}
+                            {doctor.googleMapsLink && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => window.open(doctor.googleMapsLink!, "_blank")}
+                              >
+                                <ExternalLink className="w-4 h-4 mr-2" />
+                                Location
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Write Review Button */}
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => handleOpenReviewDialog(doctor)}
+                          >
+                            <MessageSquarePlus className="w-4 h-4 mr-2" />
+                            Write Review
+                          </Button>
                         </div>
                       </div>
                     </CardContent>
@@ -284,6 +305,22 @@ const DoctorFinder = () => {
           ) : null}
         </AnimatePresence>
       </div>
+
+      {/* Review Dialog */}
+      {selectedDoctor && (
+        <DoctorReviewDialog
+          isOpen={reviewDialogOpen}
+          onClose={() => {
+            setReviewDialogOpen(false);
+            setSelectedDoctor(null);
+          }}
+          doctor={{
+            name: selectedDoctor.name,
+            specialty: selectedDoctor.specialty,
+            city: selectedDoctor.city,
+          }}
+        />
+      )}
     </section>
   );
 };

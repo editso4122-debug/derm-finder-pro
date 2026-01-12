@@ -14,7 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      doctor_reviews: {
+        Row: {
+          created_at: string
+          doctor_location: string | null
+          doctor_name: string
+          doctor_specialty: string | null
+          id: string
+          prescription_url: string
+          rating: number
+          review_text: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          doctor_location?: string | null
+          doctor_name: string
+          doctor_specialty?: string | null
+          id?: string
+          prescription_url: string
+          rating: number
+          review_text: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          doctor_location?: string | null
+          doctor_name?: string
+          doctor_specialty?: string | null
+          id?: string
+          prescription_url?: string
+          rating?: number
+          review_text?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
