@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import RecoveryStories from "./RecoveryStories";
 
 type Language = "english" | "hindi" | "marathi";
 
@@ -638,6 +639,9 @@ const SkinAnalyzer = () => {
                       </p>
                     </CardContent>
                   </Card>
+
+                  {/* Recovery Stories Section */}
+                  <RecoveryStories condition={result.condition} language={language} />
                 </motion.div>
               ) : (
                 <motion.div
