@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Menu, X, Pill, User, LogOut, Settings, FileText } from "lucide-react";
+import { Activity, Menu, X, Pill, User, LogOut, Settings, FileText, Bell } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   DropdownMenu,
@@ -130,6 +130,21 @@ const GooeyNavbar = () => {
 
             {/* CTA Buttons */}
             <div className="hidden md:flex items-center gap-3">
+              <Link to="/medicine-reminder">
+                <motion.div
+                  className="flex items-center gap-2 px-4 py-2 bg-secondary text-foreground font-medium text-sm rounded-full border border-primary/30"
+                  whileHover={{
+                    scale: 1.05,
+                    borderColor: "hsl(174 72% 50% / 0.6)"
+                  }}
+                  whileTap={{
+                    scale: 0.95
+                  }}
+                >
+                  <Bell className="w-4 h-4 text-primary" />
+                  Reminders
+                </motion.div>
+              </Link>
               <Link to="/medicine-scanner">
                 <motion.div
                   className="flex items-center gap-2 px-4 py-2 bg-secondary text-foreground font-medium text-sm rounded-full border border-primary/30"
@@ -245,6 +260,14 @@ const GooeyNavbar = () => {
                     {item.name}
                   </a>
                 ))}
+                <Link 
+                  to="/medicine-reminder" 
+                  className="flex items-center gap-2 px-4 py-3 text-foreground hover:bg-primary/10 rounded-lg transition-colors"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Bell className="w-4 h-4 text-primary" />
+                  Medicine Reminders
+                </Link>
                 <Link 
                   to="/medicine-scanner" 
                   className="flex items-center gap-2 px-4 py-3 text-foreground hover:bg-primary/10 rounded-lg transition-colors"
