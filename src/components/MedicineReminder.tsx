@@ -8,7 +8,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Reminder {
@@ -21,10 +20,9 @@ interface Reminder {
 }
 
 const MedicineReminder = () => {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sendingTest, setSendingTest] = useState<string | null>(null);
   
@@ -32,36 +30,18 @@ const MedicineReminder = () => {
   const [note, setNote] = useState('');
   const [reminderTime, setReminderTime] = useState('');
   const [email, setEmail] = useState('');
+  const [userEmail, setUserEmail] = useState(''); // Email used to fetch reminders
 
-  useEffect(() => {
-    if (user) {
-      fetchReminders();
-      setEmail(user.email || '');
-    }
-  }, [user]);
-
-  // Check for due reminders every minute
-  useEffect(() => {
-    const checkReminders = () => {
-      const now = new Date();
-      const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
-      
-      reminders.forEach(reminder => {
-        if (reminder.is_active && reminder.reminder_time.slice(0, 5) === currentTime) {
-          sendReminderEmail(reminder);
-        }
-      });
-    };
-
-    const interval = setInterval(checkReminders, 60000); // Check every minute
-    return () => clearInterval(interval);
-  }, [reminders]);
-
-  const fetchReminders = async () => {
+  // Fetch reminders when user enters their email
+  const fetchReminders = async (emailToFetch: string) => {
+    if (!emailToFetch) return;
+    
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('medicine_reminders')
         .select('*')
+        .eq('email', emailToFetch)
         .order('reminder_time', { ascending: true });
 
       if (error) throw error;
@@ -87,12 +67,23 @@ const MedicineReminder = () => {
       return;
     }
 
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const { error } = await supabase
         .from('medicine_reminders')
         .insert({
-          user_id: user?.id,
+          user_id: null,
           medicine_name: medicineName,
           note: note || null,
           reminder_time: reminderTime,
@@ -110,7 +101,8 @@ const MedicineReminder = () => {
       setMedicineName('');
       setNote('');
       setReminderTime('');
-      fetchReminders();
+      setUserEmail(email);
+      fetchReminders(email);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -192,17 +184,6 @@ const MedicineReminder = () => {
     }
   };
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-background pt-24 px-4">
-        <div className="max-w-2xl mx-auto text-center">
-          <BellRing className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-          <h2 className="text-2xl font-bold text-foreground mb-2">Sign in Required</h2>
-          <p className="text-muted-foreground">Please sign in to manage your medicine reminders.</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background pt-24 px-4 pb-12">
