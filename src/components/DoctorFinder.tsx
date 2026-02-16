@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, MapPin, Phone, Building2, Loader2, Star, Clock, ExternalLink, MessageSquarePlus } from "lucide-react";
+import { Search, MapPin, Phone, Loader2, Star, Clock, ExternalLink, MessageSquarePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,7 +23,6 @@ interface Doctor {
 
 const DoctorFinder = () => {
   const [pinCode, setPinCode] = useState("");
-  const [city, setCity] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -37,10 +36,10 @@ const DoctorFinder = () => {
   };
 
   const searchDoctors = async () => {
-    if (!pinCode && !city) {
+    if (!pinCode) {
       toast({
-        title: "Location required",
-        description: "Please enter a pin code or city name.",
+        title: "Pin code required",
+        description: "Please enter a 6-digit pin code.",
         variant: "destructive",
       });
       return;
@@ -51,7 +50,7 @@ const DoctorFinder = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke('find-doctors', {
-        body: { pinCode, city }
+        body: { pinCode }
       });
 
       if (error) {
@@ -103,7 +102,7 @@ const DoctorFinder = () => {
             Find a <span className="text-primary">Dermatologist</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Search for dermatologists near you in India
+            Search for dermatologists near you using your pin code
           </p>
         </motion.div>
 
@@ -116,40 +115,25 @@ const DoctorFinder = () => {
         >
           <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
             <CardContent className="p-6">
-              <div className="grid sm:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Pin Code</label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      type="text"
-                      value={pinCode}
-                      onChange={(e) => setPinCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      placeholder="Enter 6-digit pin code"
-                      className="pl-10 bg-secondary/50 border-border/50"
-                      maxLength={6}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">Indian pin codes (6 digits)</p>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Pin Code</label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    value={pinCode}
+                    onChange={(e) => setPinCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="Enter 6-digit pin code"
+                    className="pl-10 bg-secondary/50 border-border/50"
+                    maxLength={6}
+                  />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">City Name</label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder="Enter city name"
-                      className="pl-10 bg-secondary/50 border-border/50"
-                    />
-                  </div>
-                </div>
+                <p className="text-xs text-muted-foreground mt-1">Indian pin codes (6 digits)</p>
               </div>
 
               <Button
                 onClick={searchDoctors}
-                disabled={isSearching || (!pinCode && !city)}
+                disabled={isSearching || !pinCode}
                 className="w-full h-12 text-base font-medium"
                 size="lg"
               >
@@ -307,7 +291,7 @@ const DoctorFinder = () => {
               </div>
               <h3 className="text-lg font-medium mb-2">No Doctors Found</h3>
               <p className="text-muted-foreground text-sm">
-                Try searching with a different pin code or city name in India
+                Try searching with a different pin code
               </p>
             </motion.div>
           ) : null}
