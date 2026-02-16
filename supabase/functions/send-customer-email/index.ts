@@ -111,7 +111,7 @@ const handler = async (req: Request): Promise<Response> => {
       console.log("User confirmation sent:", userData);
     }
 
-    return new Response(JSON.stringify({ success: true, data }), {
+    return new Response(JSON.stringify({ success: true, data: teamData }), {
       status: 200,
       headers: {
         "Content-Type": "application/json",
