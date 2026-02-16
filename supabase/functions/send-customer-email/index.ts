@@ -28,8 +28,8 @@ const handler = async (req: Request): Promise<Response> => {
     console.log(`Issue reported by: ${email}`);
     console.log(`Issue: ${issue}`);
 
-    // Send notification to MediBot team (owner email) - works with Resend testing mode
-    const emailResponse = await fetch("https://api.resend.com/emails", {
+    // Send notification to MediBot team (owner email)
+    const teamEmailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${resendApiKey}`,
@@ -37,21 +37,17 @@ const handler = async (req: Request): Promise<Response> => {
       },
       body: JSON.stringify({
         from: "MediBot <onboarding@resend.dev>",
-        to: ["mr.unknown2174@gmail.com"], // Send to owner - works in testing mode
+        to: ["mr.unknown2174@gmail.com"],
         subject: `New Issue Report from ${email}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <h2 style="color: #10B981;">New Customer Issue Report</h2>
-            
             <p><strong>Customer Email:</strong> ${email}</p>
-            
             <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
               <p style="margin: 0; color: #374151;"><strong>Issue Reported:</strong></p>
               <p style="margin: 10px 0 0 0; color: #6b7280;">${issue}</p>
             </div>
-            
             <p>Please follow up with the customer at their provided email address.</p>
-            
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
             <p style="font-size: 12px; color: #9ca3af;">MediBot Customer Care Notification</p>
           </div>
@@ -59,14 +55,61 @@ const handler = async (req: Request): Promise<Response> => {
       }),
     });
 
-    const data = await emailResponse.json();
-
-    if (!emailResponse.ok) {
-      console.error("Resend API error:", data);
-      throw new Error(data.message || "Failed to send email");
+    const teamData = await teamEmailResponse.json();
+    if (!teamEmailResponse.ok) {
+      console.error("Resend API error (team):", teamData);
+      throw new Error(teamData.message || "Failed to send team notification email");
     }
+    console.log("Team notification sent:", teamData);
 
-    console.log("Email sent successfully:", data);
+    // Send confirmation email to the user
+    const userEmailResponse = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "MediBot <onboarding@resend.dev>",
+        to: [email],
+        subject: "We've received your issue report - MediBot",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #10B981 0%, #059669 100%); border-radius: 12px;">
+            <div style="background: white; border-radius: 8px; padding: 30px;">
+              <h1 style="color: #10B981; margin: 0 0 20px 0; font-size: 24px;">
+                We've Received Your Report
+              </h1>
+              <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+                Thank you for reaching out to us. We're sorry for the inconvenience you're experiencing.
+              </p>
+              <div style="background-color: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10B981;">
+                <p style="margin: 0; color: #166534; font-size: 14px;"><strong>Your reported issue:</strong></p>
+                <p style="margin: 10px 0 0 0; color: #15803d; font-size: 14px;">${issue}</p>
+              </div>
+              <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+                Our team is looking into this and will resolve it as soon as possible. We sincerely apologize for any inconvenience caused.
+              </p>
+              <p style="color: #6b7280; font-size: 14px; margin: 20px 0 0 0;">
+                If you have any further questions, feel free to reach out again through our Customer Care chat.
+              </p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
+              <p style="font-size: 12px; color: #9ca3af; margin: 0;">
+                MediBot - Your Health Companion
+              </p>
+            </div>
+          </div>
+        `,
+      }),
+    });
+
+    const userData = await userEmailResponse.json();
+    if (!userEmailResponse.ok) {
+      console.error("Resend API error (user):", userData);
+      // Don't throw - team was already notified, just log the error
+      console.warn("Failed to send confirmation to user, but team was notified");
+    } else {
+      console.log("User confirmation sent:", userData);
+    }
 
     return new Response(JSON.stringify({ success: true, data }), {
       status: 200,
