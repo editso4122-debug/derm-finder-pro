@@ -3,6 +3,7 @@ import GridScanBackground from "@/components/GridScanBackground";
 import Hero from "@/components/Hero";
 import SkinAnalyzer from "@/components/SkinAnalyzer";
 import DoctorFinder from "@/components/DoctorFinder";
+import EmergencyHelpline from "@/components/EmergencyHelpline";
 import Footer from "@/components/Footer";
 import CustomerCare from "@/components/CustomerCare";
 
@@ -16,6 +17,7 @@ const Index = () => {
         <Hero />
         <SkinAnalyzer />
         <DoctorFinder />
+        <EmergencyHelpline />
       </main>
       
       <Footer />
