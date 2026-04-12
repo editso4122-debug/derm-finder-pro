@@ -81,9 +81,11 @@ serve(async (req) => {
         if (place.url && place.url.length > 0) {
           googleMapsLink = place.url;
         } else if (place.placeId) {
-          googleMapsLink = `https://www.google.com/maps/place/?q=place_id:${place.placeId}`;
+          googleMapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.title || place.name || "")}&query_place_id=${place.placeId}`;
         } else if (place.location?.lat && place.location?.lng) {
-          googleMapsLink = `https://www.google.com/maps?q=${place.location.lat},${place.location.lng}`;
+          googleMapsLink = `https://www.google.com/maps/search/?api=1&query=${place.location.lat},${place.location.lng}`;
+        } else if (place.address) {
+          googleMapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address)}`;
         }
         
         doctors.push({
