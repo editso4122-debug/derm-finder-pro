@@ -17,6 +17,7 @@ const Index = () => {
         <Hero />
         <SkinAnalyzer />
         <DoctorFinder />
+        <EmergencyHelpline />
       </main>
       
       <Footer />
