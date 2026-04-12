@@ -27,9 +27,6 @@ const GooeyNavbar = () => {
     name: "Find Doctor",
     href: "#doctors"
   }, {
-    name: "Emergency",
-    href: "#emergency"
-  }, {
     name: "About",
     href: "#about"
   }];
