@@ -28,14 +28,26 @@ serve(async (req) => {
       });
     }
 
-    const body = await req.json();
-    const { disease, confidence, symptoms, question, language = "english" } = body;
-    
-    const langInstruction = language === "hindi" 
-      ? "IMPORTANT: You MUST respond entirely in Hindi (हिंदी). Understand questions in Hindi, Marathi, or English but always respond in Hindi."
-      : language === "marathi"
-      ? "IMPORTANT: You MUST respond entirely in Marathi (मराठी). Understand questions in Hindi, Marathi, or English but always respond in Marathi."
-      : "Respond in English. You can understand questions in Hindi, Marathi, or English.";
+    let parsed: unknown;
+    try {
+      parsed = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const raw = (parsed ?? {}) as Record<string, unknown>;
+    const disease = typeof raw.disease === "string" ? raw.disease.trim() : "";
+    const symptoms = typeof raw.symptoms === "string" ? raw.symptoms.trim() : "";
+    const question = typeof raw.question === "string" ? raw.question.trim() : "";
+    const confidenceNum = Number(raw.confidence);
+    const confidence = Number.isFinite(confidenceNum)
+      ? Math.min(100, Math.max(0, confidenceNum))
+      : undefined;
+    const langRaw = typeof raw.language === "string" ? raw.language.toLowerCase() : "english";
+    const language = ["english", "hindi", "marathi"].includes(langRaw) ? langRaw : "english";
 
     if (!disease) {
       return new Response(JSON.stringify({ error: "Disease name is required" }), {
@@ -43,6 +55,19 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    if (disease.length > 200 || symptoms.length > 2000 || question.length > 1000) {
+      return new Response(JSON.stringify({ error: "Input exceeds allowed length" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const langInstruction = language === "hindi" 
+      ? "IMPORTANT: You MUST respond entirely in Hindi (हिंदी). Understand questions in Hindi, Marathi, or English but always respond in Hindi."
+      : language === "marathi"
+      ? "IMPORTANT: You MUST respond entirely in Marathi (मराठी). Understand questions in Hindi, Marathi, or English but always respond in Marathi."
+      : "Respond in English. You can understand questions in Hindi, Marathi, or English.";
 
     // Build prompt based on whether it's initial explanation or Q&A
     let userPrompt: string;
