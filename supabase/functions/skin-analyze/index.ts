@@ -16,6 +16,11 @@ function withCors(req: Request, extraHeaders: Record<string, string> = {}) {
   };
 }
 
+const ALLOWED_LANGUAGES = ["english", "hindi", "marathi"] as const;
+const MAX_SYMPTOMS_LEN = 2000;
+const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
+const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+
 function arrayBufferToBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -76,7 +81,10 @@ serve(async (req) => {
     const form = await req.formData();
     const file = form.get("file");
     const symptoms = String(form.get("symptoms") ?? "").trim();
-    const language = String(form.get("language") ?? "english").toLowerCase();
+    const rawLanguage = String(form.get("language") ?? "english").toLowerCase();
+    const language = (ALLOWED_LANGUAGES as readonly string[]).includes(rawLanguage)
+      ? rawLanguage
+      : "english";
 
     if (!file || !(file instanceof File)) {
       return new Response(JSON.stringify({ error: "Image file is required" }), {
@@ -92,7 +100,28 @@ serve(async (req) => {
       });
     }
 
+    if (symptoms.length > MAX_SYMPTOMS_LEN) {
+      return new Response(
+        JSON.stringify({ error: `Symptoms must be ${MAX_SYMPTOMS_LEN} characters or fewer` }),
+        { status: 400, headers: withCors(req, { "Content-Type": "application/json" }) },
+      );
+    }
+
+    if (file.size === 0 || file.size > MAX_FILE_BYTES) {
+      return new Response(JSON.stringify({ error: "Image must be between 1 byte and 8 MB" }), {
+        status: 400,
+        headers: withCors(req, { "Content-Type": "application/json" }),
+      });
+    }
+
     const mime = file.type || "image/jpeg";
+    if (!ALLOWED_MIME.includes(mime)) {
+      return new Response(JSON.stringify({ error: "Unsupported image type" }), {
+        status: 400,
+        headers: withCors(req, { "Content-Type": "application/json" }),
+      });
+    }
+
     const buf = await file.arrayBuffer();
     const b64 = arrayBufferToBase64(buf);
     const dataUrl = `data:${mime};base64,${b64}`;
