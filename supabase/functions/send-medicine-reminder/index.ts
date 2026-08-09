@@ -18,11 +18,47 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { email, medicineName, note }: ReminderEmailRequest = await req.json();
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    let parsed: unknown;
+    try {
+      parsed = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
 
+    const raw = (parsed ?? {}) as Record<string, unknown>;
+    const email = typeof raw.email === "string" ? raw.email.trim() : "";
+    const medicineName = typeof raw.medicineName === "string" ? raw.medicineName.trim() : "";
+    const note = typeof raw.note === "string" ? raw.note.trim() : "";
+
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+    if (!emailValid || !medicineName || medicineName.length > 200 || note.length > 500) {
+      return new Response(JSON.stringify({ error: "Invalid email, medicine name or note" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    const safeMedicineName = escapeHtml(medicineName);
+    const safeNote = escapeHtml(note);
+
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (!resendApiKey) {
-      throw new Error("RESEND_API_KEY not configured");
+      console.error("RESEND_API_KEY not configured");
+      return new Response(JSON.stringify({ error: "Email service is temporarily unavailable" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
     }
 
     console.log(`Sending reminder to: ${email} for medicine: ${medicineName}`);
@@ -46,9 +82,9 @@ const handler = async (req: Request): Promise<Response> => {
               
               <div style="background-color: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10B981;">
                 <h2 style="margin: 0 0 10px 0; color: #166534; font-size: 20px;">
-                  ${medicineName}
+                  ${safeMedicineName}
                 </h2>
-                ${note ? `<p style="margin: 0; color: #15803d; font-size: 16px;">${note}</p>` : ''}
+                ${safeNote ? `<p style="margin: 0; color: #15803d; font-size: 16px;">${safeNote}</p>` : ''}
               </div>
               
               <p style="color: #6b7280; font-size: 14px; margin: 20px 0 0 0;">
@@ -69,12 +105,15 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (!emailResponse.ok) {
       console.error("Resend API error:", data);
-      throw new Error(data.message || "Failed to send email");
+      return new Response(JSON.stringify({ error: "Failed to send reminder email" }), {
+        status: 502,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
     }
 
     console.log("Reminder email sent successfully:", data);
 
-    return new Response(JSON.stringify({ success: true, data }), {
+    return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: {
         "Content-Type": "application/json",
@@ -84,7 +123,7 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (error: any) {
     console.error("Error in send-medicine-reminder function:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: "Failed to send reminder email" }),
       {
         status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders },
