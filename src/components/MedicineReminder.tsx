@@ -228,6 +228,22 @@ const MedicineReminder = () => {
           </div>
         </motion.div>
 
+        {!authLoading && !user && (
+          <Card className="mb-8 border-dashed">
+            <CardContent className="py-12 text-center">
+              <Bell className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground mb-4">
+                Please sign in to create and view your private medicine reminders.
+              </p>
+              <Button asChild>
+                <Link to="/auth">Sign in</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {user && (
+        <>
         {/* Add New Reminder */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -399,6 +415,8 @@ const MedicineReminder = () => {
         >
           💡 Tip: Click "Test" to send a reminder email immediately. Keep this page open for automatic reminders.
         </motion.p>
+        </>
+        )}
       </div>
     </div>
   );
