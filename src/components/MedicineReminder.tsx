@@ -9,6 +9,8 @@ import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { Link } from 'react-router-dom';
 
 interface Reminder {
   id: string;
@@ -21,6 +23,7 @@ interface Reminder {
 
 const MedicineReminder = () => {
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,26 +33,25 @@ const MedicineReminder = () => {
   const [note, setNote] = useState('');
   const [reminderTime, setReminderTime] = useState('');
   const [email, setEmail] = useState('');
-  const [userEmail, setUserEmail] = useState(''); // Email used to fetch reminders
 
-  // Fetch reminders when user enters their email
-  const fetchReminders = async (emailToFetch: string) => {
-    if (!emailToFetch) return;
-    
+  // Reminders are owned by the signed-in user and protected by row-level security
+  const fetchReminders = async () => {
+    if (!user) return;
+
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('medicine_reminders')
         .select('*')
-        .eq('email', emailToFetch)
         .order('reminder_time', { ascending: true });
 
       if (error) throw error;
       setReminders(data || []);
-    } catch (error: any) {
+    } catch (error) {
+      console.error('Failed to load reminders:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: "Could not load your reminders.",
         variant: "destructive",
       });
     } finally {
@@ -57,7 +59,26 @@ const MedicineReminder = () => {
     }
   };
 
+  useEffect(() => {
+    if (user) {
+      setEmail((prev) => prev || user.email || '');
+      fetchReminders();
+    } else {
+      setReminders([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   const addReminder = async () => {
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to create reminders.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!medicineName || !reminderTime || !email) {
       toast({
         title: "Missing fields",
@@ -83,11 +104,11 @@ const MedicineReminder = () => {
       const { error } = await supabase
         .from('medicine_reminders')
         .insert({
-          user_id: null,
-          medicine_name: medicineName,
-          note: note || null,
+          user_id: user.id,
+          medicine_name: medicineName.trim().slice(0, 200),
+          note: note ? note.trim().slice(0, 500) : null,
           reminder_time: reminderTime,
-          email: email,
+          email: email.trim(),
           is_active: true,
         });
 
@@ -101,12 +122,12 @@ const MedicineReminder = () => {
       setMedicineName('');
       setNote('');
       setReminderTime('');
-      setUserEmail(email);
-      fetchReminders(email);
-    } catch (error: any) {
+      fetchReminders();
+    } catch (error) {
+      console.error('Failed to add reminder:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: "Could not save the reminder. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -127,10 +148,11 @@ const MedicineReminder = () => {
         title: "Reminder deleted",
         description: "The reminder has been removed",
       });
-    } catch (error: any) {
+    } catch (error) {
+      console.error('Failed to delete reminder:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: "Could not delete the reminder.",
         variant: "destructive",
       });
     }
@@ -147,10 +169,11 @@ const MedicineReminder = () => {
       setReminders(reminders.map(r => 
         r.id === id ? { ...r, is_active: isActive } : r
       ));
-    } catch (error: any) {
+    } catch (error) {
+      console.error('Failed to update reminder:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: "Could not update the reminder.",
         variant: "destructive",
       });
     }
@@ -173,10 +196,11 @@ const MedicineReminder = () => {
         title: "Reminder sent!",
         description: `Email sent to ${reminder.email}`,
       });
-    } catch (error: any) {
+    } catch (error) {
+      console.error('Failed to send reminder email:', error);
       toast({
         title: "Failed to send",
-        description: error.message,
+        description: "Could not send the reminder email.",
         variant: "destructive",
       });
     } finally {
