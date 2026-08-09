@@ -6,13 +6,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const ALLOWED_LANGUAGES = ["en", "hi", "mr"];
+const MAX_IMAGE_CHARS = 10 * 1024 * 1024; // ~7.5MB decoded
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { image, language = 'en' } = await req.json();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: 'Invalid request body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const raw = (body ?? {}) as Record<string, unknown>;
+    const image = typeof raw.image === 'string' ? raw.image : '';
+    const language = typeof raw.language === 'string' && ALLOWED_LANGUAGES.includes(raw.language)
+      ? raw.language
+      : 'en';
 
     if (!image) {
       return new Response(
@@ -21,9 +38,27 @@ serve(async (req) => {
       );
     }
 
+    if (!/^data:image\/(jpeg|jpg|png|webp|heic);base64,[A-Za-z0-9+/=\s]+$/.test(image)) {
+      return new Response(
+        JSON.stringify({ error: 'Image must be a base64-encoded JPEG, PNG or WebP data URL' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (image.length > MAX_IMAGE_CHARS) {
+      return new Response(
+        JSON.stringify({ error: 'Image is too large. Please upload an image under 7 MB.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+      console.error('LOVABLE_API_KEY is not configured');
+      return new Response(
+        JSON.stringify({ error: 'Medicine analysis is temporarily unavailable' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const languageInstructions: Record<string, string> = {
@@ -114,7 +149,10 @@ IMPORTANT: Always recommend consulting a healthcare professional before using an
         );
       }
       
-      throw new Error(`API error: ${response.status}`);
+      return new Response(
+        JSON.stringify({ error: 'Medicine analysis is temporarily unavailable' }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const data = await response.json();
@@ -128,9 +166,8 @@ IMPORTANT: Always recommend consulting a healthcare professional before using an
     );
   } catch (error: unknown) {
     console.error('Error in scan-medicine function:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to analyze medicine';
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: 'Failed to analyze medicine. Please try again.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

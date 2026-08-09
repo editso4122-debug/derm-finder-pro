@@ -152,14 +152,13 @@ const DoctorReviewDialog = ({ isOpen, onClose, doctor }: DoctorReviewDialogProps
         .upload(fileName, prescriptionFile);
 
       if (uploadError) {
-        throw new Error("Failed to upload prescription: " + uploadError.message);
+        console.error("Prescription upload failed:", uploadError);
+        throw new Error("Failed to upload prescription. Please try again.");
       }
 
-      // Get the URL of the uploaded file
-      const { data: urlData } = supabase.storage
-        .from("prescriptions")
-        .getPublicUrl(fileName);
-
+      // NOTE: the "prescriptions" bucket is PRIVATE. We intentionally store only the
+      // storage path (never a public URL). To display a prescription later, generate a
+      // short-lived signed URL with supabase.storage.from("prescriptions").createSignedUrl(path, ttl).
       // Insert review into database
       const { error: insertError } = await supabase
         .from("doctor_reviews")
@@ -174,7 +173,8 @@ const DoctorReviewDialog = ({ isOpen, onClose, doctor }: DoctorReviewDialogProps
         });
 
       if (insertError) {
-        throw new Error("Failed to submit review: " + insertError.message);
+        console.error("Review insert failed:", insertError);
+        throw new Error("Failed to submit review. Please try again.");
       }
 
       toast({

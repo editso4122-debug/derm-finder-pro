@@ -12,11 +12,37 @@ serve(async (req) => {
   }
 
   try {
-    const { pinCode, city } = await req.json();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const raw = (body ?? {}) as Record<string, unknown>;
+    const pinCode = typeof raw.pinCode === "string" ? raw.pinCode.trim() : "";
+    const city = typeof raw.city === "string" ? raw.city.trim() : "";
 
     if (!pinCode && !city) {
       return new Response(
         JSON.stringify({ error: "Please provide a pin code or city" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (pinCode && !/^\d{6}$/.test(pinCode)) {
+      return new Response(
+        JSON.stringify({ error: "Pin code must be 6 digits" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (city && (city.length > 100 || !/^[\p{L}\p{M}\s.,'-]+$/u.test(city))) {
+      return new Response(
+        JSON.stringify({ error: "Invalid city name" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -61,7 +87,10 @@ serve(async (req) => {
     if (!actorRunResponse.ok) {
       const errorText = await actorRunResponse.text();
       console.error("Apify API error:", actorRunResponse.status, errorText);
-      throw new Error("Failed to fetch from Apify");
+      return new Response(
+        JSON.stringify({ error: "Doctor search is temporarily unavailable" }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const results = await actorRunResponse.json();
@@ -112,7 +141,7 @@ serve(async (req) => {
   } catch (error) {
     console.error("Error in find-doctors function:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: "Unable to search for doctors right now" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
